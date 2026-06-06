@@ -11,6 +11,7 @@ use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxItemEnrichment;
 use Platform\Inbox\Models\InboxPlaudImport;
 use Platform\Inbox\Services\InboxAudioIngestionService;
+use Platform\Inbox\Sources\Plaud\Jobs\DownloadPlaudAudioJob;
 
 /**
  * Receives a complete Plaud recording payload (file_id, title, note markdown,
@@ -160,6 +161,19 @@ class SyncTool implements ToolContract, ToolMetadataContract
         // is_primary stays false; the OpenAI-driven meeting-transcript template
         // dispatched by InboxAudioIngestionService becomes primary on success.
         $this->storeVendorEnrichment($item, $parsed);
+
+        // Audio download is async — sync tool stays fast, audio fills in
+        // shortly after via ContextFileService.
+        if ($sourceUrl) {
+            try {
+                DownloadPlaudAudioJob::dispatch($item->id, $sourceUrl);
+            } catch (\Throwable $e) {
+                \Log::warning('Inbox.Plaud: audio download dispatch failed', [
+                    'item_id' => $item->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         return ToolResult::success([
             'inbox_item_id' => $item->id,
