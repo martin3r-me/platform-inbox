@@ -1,0 +1,17 @@
+{
+  "name": "martin3r/platform-inbox",
+  "description": "User-centric communication inbox — triage, compose and link sessions from user-connectors to organization entities.",
+  "type": "library",
+  "autoload": {
+    "psr-4": {
+      "Platform\\Inbox\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Platform\\Inbox\\InboxServiceProvider"
+      ]
+    }
+  }
+}
