@@ -165,9 +165,43 @@
         $enrichment = $item->primaryEnrichment();
         $output = $enrichment?->output ?? [];
         $participants = $item->participants()->orderBy('role')->limit(20)->get();
+        $isRecording = $item->channel?->value === 'recording';
+        $segments = $isRecording ? $item->segments()->limit(500)->get() : collect();
+        $speakerNames = $participants
+            ->where('role', \Platform\Inbox\Models\InboxItemParticipant::ROLE_SPEAKER)
+            ->mapWithKeys(fn ($p) => [$p->identifier => $p->display_name ?: $p->identifier]);
+        $audioRef = $isRecording
+            ? $item->getOrderedFileReferences()->first(fn ($ref) => ($ref->meta['kind'] ?? null) === 'audio_original')
+            : null;
     @endphp
 
     <div class="flex-1 min-w-0 min-h-0 flex flex-col overflow-auto p-6 space-y-6 max-w-3xl">
+        {{-- Aufnahme (only for recording channel) --}}
+        @if($isRecording)
+            <div class="bg-white border border-[var(--ui-border)]/40 rounded-lg p-5 space-y-3">
+                <div class="flex items-center gap-2">
+                    @svg('heroicon-o-microphone', 'w-4 h-4 text-[var(--ui-primary)]')
+                    <h2 class="text-sm font-semibold text-[var(--ui-secondary)] m-0">Aufnahme</h2>
+                    @if($item->audio_duration_seconds)
+                        <span class="text-[11px] text-[var(--ui-muted)] ml-auto">
+                            {{ gmdate($item->audio_duration_seconds >= 3600 ? 'H:i:s' : 'i:s', $item->audio_duration_seconds) }}
+                            @if($item->audio_recorded_at)
+                                · {{ $item->audio_recorded_at->format('d.m.Y H:i') }}
+                            @endif
+                        </span>
+                    @endif
+                </div>
+                @if($audioRef?->contextFile?->url)
+                    <audio controls preload="metadata" class="w-full">
+                        <source src="{{ $audioRef->contextFile->url }}" type="{{ $audioRef->contextFile->meta['mime_type'] ?? 'audio/mpeg' }}" />
+                        Dein Browser kann das Audio nicht abspielen.
+                    </audio>
+                @else
+                    <p class="text-[11px] text-[var(--ui-muted)] m-0 italic">Audio-Datei nicht persistiert — kommt mit Whisper-Audio-Upload-Patch.</p>
+                @endif
+            </div>
+        @endif
+
         {{-- Anreicherung — TL;DR + Summary + Action Items --}}
         @if($enrichment)
             <div class="bg-white border border-[var(--ui-border)]/40 rounded-lg p-5 space-y-4">
@@ -295,6 +329,32 @@
                         </li>
                     @endforeach
                 </ul>
+            </div>
+        @endif
+
+        {{-- Transkript-Segmente (only for recording channel) --}}
+        @if($isRecording && $segments->isNotEmpty())
+            <div class="bg-white border border-[var(--ui-border)]/40 rounded-lg" x-data="{ open: true }">
+                <button @click="open = !open" class="w-full flex items-center justify-between px-5 py-3 text-left">
+                    <h2 class="text-sm font-semibold text-[var(--ui-secondary)] flex items-center gap-2 m-0">
+                        @svg('heroicon-o-bars-3-bottom-left', 'w-4 h-4 text-[var(--ui-muted)]')
+                        Transkript ({{ $segments->count() }} Segmente)
+                    </h2>
+                    @svg('heroicon-o-chevron-down', 'w-4 h-4 text-[var(--ui-muted)]')
+                </button>
+                <div x-show="open" x-cloak class="px-5 pb-4 space-y-2 max-h-96 overflow-y-auto">
+                    @foreach($segments as $seg)
+                        <div class="flex gap-2 text-[12px]">
+                            <span class="text-[10px] text-[var(--ui-muted)] tabular-nums whitespace-nowrap w-14">
+                                {{ gmdate('i:s', (int) $seg->start_seconds) }}
+                            </span>
+                            <span class="text-[10px] font-semibold uppercase tracking-wider text-[var(--ui-primary)] w-20 truncate">
+                                {{ $speakerNames[$seg->speaker_label] ?? $seg->speaker_label ?? '?' }}
+                            </span>
+                            <span class="text-[var(--ui-secondary)] flex-1 leading-snug">{{ $seg->text }}</span>
+                        </div>
+                    @endforeach
+                </div>
             </div>
         @endif
 

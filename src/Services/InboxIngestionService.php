@@ -145,9 +145,213 @@ class InboxIngestionService
 
         $this->upsertSubscriptionsForInserts($inserts);
         $this->applyRulesForInserts($sourceMorph, $inserts);
+        $this->createParticipantsForInserts($sourceMorph, $inserts);
         $this->dispatchDefaultEnrichmentForInserts($sourceMorph, $inserts);
 
         return count($inserts);
+    }
+
+    /**
+     * Materialize InboxItemParticipants for each freshly inserted item:
+     * sender + recipients (mail), caller/callee (call/message), organizer +
+     * attendees (meeting). Entity-matching is best-effort via existing
+     * sender_subscriptions or user email lookup; ambiguity stays nullable.
+     */
+    protected function createParticipantsForInserts(string $sourceMorph, array $inserts): void
+    {
+        if (empty($inserts)) {
+            return;
+        }
+
+        $sourceIds = array_unique(array_map(fn ($r) => (int) $r['source_id'], $inserts));
+        $items = \Platform\Inbox\Models\InboxItem::query()
+            ->where('source_type', $sourceMorph)
+            ->whereIn('source_id', $sourceIds)
+            ->get();
+
+        if ($items->isEmpty()) {
+            return;
+        }
+
+        $sessions = $this->fetchSessionFieldsForParticipants($sourceMorph, $sourceIds);
+
+        $participantRows = [];
+        $now = now();
+        foreach ($items as $item) {
+            $session = $sessions[$item->source_id] ?? null;
+            if (!$session) {
+                continue;
+            }
+            $direction = $session->direction ?? 'inbound';
+
+            foreach ($this->extractParticipantsFromSession($sourceMorph, $session, $direction) as $p) {
+                $participantRows[] = array_merge($p, [
+                    'inbox_item_id' => $item->id,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            }
+        }
+
+        if (!empty($participantRows)) {
+            foreach (array_chunk($participantRows, 500) as $chunk) {
+                DB::table('inbox_item_participants')->insert($chunk);
+            }
+        }
+    }
+
+    /**
+     * Fetch only the fields needed for participant extraction. Keeps the
+     * earlier (subject/body) fetch separate so it doesn't grow unboundedly.
+     */
+    protected function fetchSessionFieldsForParticipants(string $sourceMorph, array $ids): array
+    {
+        $sessionTable = $this->tableForMorph($sourceMorph);
+        if ($sessionTable === null) {
+            return [];
+        }
+
+        $columns = match ($sourceMorph) {
+            'user_connector_mail_session' => ['id', 'direction', 'from_address', 'from_name', 'to_addresses', 'cc_addresses'],
+            'user_connector_call_session' => ['id', 'direction', 'from_number', 'to_number'],
+            'user_connector_message_session' => ['id', 'direction', 'from_identifier', 'to_identifier', 'from_user_id'],
+            'user_connector_meeting_session' => ['id', 'direction', 'organizer_address', 'organizer_name', 'attendee_addresses'],
+            default => null,
+        };
+        if (!$columns) {
+            return [];
+        }
+
+        return DB::table($sessionTable)
+            ->whereIn('id', $ids)
+            ->select($columns)
+            ->get()
+            ->keyBy('id')
+            ->all();
+    }
+
+    /**
+     * Returns the participant rows for one session, role-tagged.
+     * @return array<int, array<string, mixed>>
+     */
+    protected function extractParticipantsFromSession(string $sourceMorph, object $session, string $direction): array
+    {
+        $rows = [];
+
+        switch ($sourceMorph) {
+            case 'user_connector_mail_session':
+                if ($from = $session->from_address ?? null) {
+                    $rows[] = $this->participantRow(
+                        role: \Platform\Inbox\Models\InboxItemParticipant::ROLE_SENDER,
+                        identifier: $from,
+                        kind: 'email',
+                        displayName: $session->from_name ?? null,
+                    );
+                }
+                foreach ($this->splitAddresses($session->to_addresses ?? null) as $address) {
+                    $rows[] = $this->participantRow(
+                        role: \Platform\Inbox\Models\InboxItemParticipant::ROLE_RECIPIENT,
+                        identifier: $address,
+                        kind: 'email',
+                    );
+                }
+                foreach ($this->splitAddresses($session->cc_addresses ?? null) as $address) {
+                    $rows[] = $this->participantRow(
+                        role: \Platform\Inbox\Models\InboxItemParticipant::ROLE_CC,
+                        identifier: $address,
+                        kind: 'email',
+                    );
+                }
+                break;
+
+            case 'user_connector_call_session':
+                $callerNumber = $direction === 'inbound' ? ($session->from_number ?? null) : ($session->to_number ?? null);
+                if ($callerNumber) {
+                    $rows[] = $this->participantRow(
+                        role: \Platform\Inbox\Models\InboxItemParticipant::ROLE_SENDER,
+                        identifier: $callerNumber,
+                        kind: 'phone',
+                    );
+                }
+                break;
+
+            case 'user_connector_message_session':
+                $from = $direction === 'inbound' ? ($session->from_identifier ?? null) : ($session->to_identifier ?? null);
+                if ($from) {
+                    $rows[] = $this->participantRow(
+                        role: \Platform\Inbox\Models\InboxItemParticipant::ROLE_SENDER,
+                        identifier: $from,
+                        kind: 'teams',
+                    );
+                }
+                break;
+
+            case 'user_connector_meeting_session':
+                if ($organizer = $session->organizer_address ?? null) {
+                    $rows[] = $this->participantRow(
+                        role: \Platform\Inbox\Models\InboxItemParticipant::ROLE_ORGANIZER,
+                        identifier: $organizer,
+                        kind: 'email',
+                        displayName: $session->organizer_name ?? null,
+                    );
+                }
+                foreach ($this->splitAddresses($session->attendee_addresses ?? null) as $address) {
+                    $rows[] = $this->participantRow(
+                        role: \Platform\Inbox\Models\InboxItemParticipant::ROLE_ATTENDEE,
+                        identifier: $address,
+                        kind: 'email',
+                    );
+                }
+                break;
+        }
+
+        return $rows;
+    }
+
+    protected function participantRow(string $role, ?string $identifier, ?string $kind, ?string $displayName = null): array
+    {
+        $normalized = InboxSenderSubscription::normalize($identifier, $kind ?? 'email');
+        return [
+            'role' => $role,
+            'identifier' => $normalized,
+            'identifier_kind' => $kind,
+            'display_name' => $displayName,
+            'entity_id' => $this->resolveEntityIdForIdentifier($normalized, $kind),
+            'entity_confidence' => null,
+            'voice_profile_id' => null,
+        ];
+    }
+
+    /**
+     * Cheapest-possible entity resolution: only emails, and only via the
+     * "user email matches organization_entity.linked_user_id" path. Avoids
+     * touching organization classes directly so the soft-coupling is kept.
+     */
+    protected function resolveEntityIdForIdentifier(?string $identifier, ?string $kind): ?int
+    {
+        if ($kind !== 'email' || !$identifier) {
+            return null;
+        }
+        if (!\Illuminate\Support\Facades\Schema::hasTable('organization_entities')) {
+            return null;
+        }
+        return DB::table('organization_entities as e')
+            ->join('users as u', 'u.id', '=', 'e.linked_user_id')
+            ->whereRaw('LOWER(u.email) = ?', [strtolower($identifier)])
+            ->whereNull('e.deleted_at')
+            ->where('e.is_active', true)
+            ->value('e.id');
+    }
+
+    protected function tableForMorph(string $morph): ?string
+    {
+        return match ($morph) {
+            'user_connector_mail_session' => 'user_connector_mail_sessions',
+            'user_connector_call_session' => 'user_connector_call_sessions',
+            'user_connector_message_session' => 'user_connector_message_sessions',
+            'user_connector_meeting_session' => 'user_connector_meeting_sessions',
+            default => null,
+        };
     }
 
     /**
@@ -285,6 +489,7 @@ class InboxIngestionService
             $cfg['sender_field'],
             $cfg['subject_field'] ?? null,
             $cfg['preview_field'] ?? null,
+            $cfg['body_field'] ?? null,
         ]);
 
         // Mail has a separate from_name; everything else doesn't.
@@ -342,16 +547,5 @@ class InboxIngestionService
     protected function normalizeSender(?string $value, string $kind): ?string
     {
         return \Platform\Inbox\Models\InboxSenderSubscription::normalize($value, $kind);
-    }
-
-    protected function tableForMorph(string $morph): ?string
-    {
-        return match ($morph) {
-            'user_connector_mail_session' => 'user_connector_mail_sessions',
-            'user_connector_call_session' => 'user_connector_call_sessions',
-            'user_connector_message_session' => 'user_connector_message_sessions',
-            'user_connector_meeting_session' => 'user_connector_meeting_sessions',
-            default => null,
-        };
     }
 }

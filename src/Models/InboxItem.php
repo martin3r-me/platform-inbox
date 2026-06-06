@@ -87,6 +87,11 @@ class InboxItem extends Model
         return $this->hasMany(InboxItemParticipant::class, 'inbox_item_id');
     }
 
+    public function segments(): HasMany
+    {
+        return $this->hasMany(InboxItemSegment::class, 'inbox_item_id')->orderBy('start_seconds');
+    }
+
     public function primaryEnrichment(): ?InboxItemEnrichment
     {
         return $this->enrichments()

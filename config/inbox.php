@@ -48,6 +48,8 @@ return [
             'sender_kind' => 'email',
             'subject_field' => 'subject',
             'preview_field' => 'body_preview',
+            'body_field' => 'body',
+            'body_format' => 'text',
             'received_at_field' => 'received_at',
         ],
         'user_connector_call_session' => [
