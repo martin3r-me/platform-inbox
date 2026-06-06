@@ -94,6 +94,23 @@ class InboxServiceProvider extends ServiceProvider
         }
 
         $this->registerDefaultChannelHandlers();
+        $this->registerTools();
+    }
+
+    /**
+     * Source-adapter MCP tools — receive vendor payloads (Plaud today,
+     * future Twilio voicemail / Zoom recordings / …) and route them
+     * through InboxAudioIngestionService. Each adapter stays a thin
+     * shim: parse, normalise, hand off.
+     */
+    protected function registerTools(): void
+    {
+        try {
+            $registry = resolve(\Platform\Core\Tools\ToolRegistry::class);
+            $registry->register(new \Platform\Inbox\Sources\Plaud\SyncTool());
+        } catch (\Throwable $e) {
+            \Log::warning('Inbox: tool registration failed', ['error' => $e->getMessage()]);
+        }
     }
 
     /**
