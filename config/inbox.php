@@ -42,6 +42,11 @@ return [
                     'route' => 'inbox.templates.index',
                     'icon'  => 'heroicon-o-sparkles',
                 ],
+                [
+                    'label' => 'Kosten',
+                    'route' => 'inbox.costs.index',
+                    'icon'  => 'heroicon-o-banknotes',
+                ],
             ],
         ],
     ],
