@@ -8,6 +8,7 @@ use Platform\Inbox\Enums\InboxItemStatus;
 use Platform\Inbox\Enums\SubscriptionStatus;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxSenderSubscription;
+use Platform\Inbox\Services\InboxEntityLinkService;
 
 class Index extends Component
 {
@@ -45,6 +46,21 @@ class Index extends Component
         }
 
         return $query->limit(200)->get();
+    }
+
+    /**
+     * Entities linked to each visible item, keyed by item_id.
+     * Empty array when the Organization module is not installed.
+     * @return array<int, array<int, array{id:int, name:string, type:string|null, code:string|null}>>
+     */
+    #[Computed]
+    public function entityLinksByItem(): array
+    {
+        $ids = $this->items->pluck('id')->all();
+        if (empty($ids)) {
+            return [];
+        }
+        return app(InboxEntityLinkService::class)->linksForItems($ids);
     }
 
     /**

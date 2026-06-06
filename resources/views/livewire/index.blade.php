@@ -1,6 +1,7 @@
 @php
     $items = $this->items;
     $senderMeta = $this->senderMeta;
+    $entityLinks = $this->entityLinksByItem;
     $openCount = $items->count();
     $byChannel = $items->groupBy(fn ($i) => $i->channel?->value)->map->count();
     $vipCount = collect($senderMeta)->filter(fn ($m) => $m['is_vip'] ?? false)->count();
@@ -149,6 +150,20 @@
                                     @endif
                                 </div>
                             </a>
+                            @php $linked = $entityLinks[$item->id] ?? []; @endphp
+                            @if(!empty($linked))
+                                <div class="flex flex-wrap gap-1 mt-1">
+                                    @foreach(array_slice($linked, 0, 3) as $e)
+                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded">
+                                            @svg('heroicon-o-cube', 'w-2.5 h-2.5')
+                                            {{ Str::limit($e['name'], 20) }}
+                                        </span>
+                                    @endforeach
+                                    @if(count($linked) > 3)
+                                        <span class="text-[10px] text-[var(--ui-muted)]">+ {{ count($linked) - 3 }}</span>
+                                    @endif
+                                </div>
+                            @endif
                         </div>
                         <div class="text-[10px] text-[var(--ui-muted)] tabular-nums whitespace-nowrap">
                             {{ $item->received_at?->diffForHumans() }}

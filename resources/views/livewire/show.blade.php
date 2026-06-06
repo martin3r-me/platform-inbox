@@ -51,8 +51,86 @@
     </x-slot>
 
     <x-slot name="activity">
-        <x-ui-page-sidebar title="Quelle" icon="heroicon-o-link" width="w-80" :defaultOpen="false" storeKey="activityOpen" side="right">
-            <div class="p-4 space-y-3">
+        <x-ui-page-sidebar title="Verknüpfungen" icon="heroicon-o-link" width="w-80" :defaultOpen="true" storeKey="activityOpen" side="right">
+            <div class="p-4 space-y-5">
+
+                @if($this->entityLinkingEnabled)
+                    <section>
+                        <h3 class="text-[10px] font-semibold uppercase tracking-wider text-[var(--ui-muted)] mb-2">Verknüpfte Entities</h3>
+                        @if(empty($this->linkedEntities))
+                            <p class="text-[11px] text-[var(--ui-muted)] m-0 italic">Noch nichts verknüpft.</p>
+                        @else
+                            <ul class="space-y-1 list-none p-0 m-0">
+                                @foreach($this->linkedEntities as $e)
+                                    <li class="flex items-center gap-2 px-2 py-1.5 bg-[var(--ui-muted-5)] rounded text-[11px]">
+                                        @svg('heroicon-o-cube', 'w-3.5 h-3.5 text-[var(--ui-muted)] flex-shrink-0')
+                                        <div class="flex-1 min-w-0">
+                                            <a href="{{ route('organization.entities.show', $e['id']) }}"
+                                               class="block text-[var(--ui-secondary)] truncate font-medium hover:underline">{{ $e['name'] }}</a>
+                                            @if($e['type'])
+                                                <span class="text-[10px] text-[var(--ui-muted)]">{{ $e['type'] }}</span>
+                                            @endif
+                                        </div>
+                                        <button wire:click="unlinkEntity({{ $e['id'] }})" title="Lösen"
+                                                class="text-[var(--ui-muted)] hover:text-red-600 flex-shrink-0">
+                                            @svg('heroicon-o-x-mark', 'w-3.5 h-3.5')
+                                        </button>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @endif
+                    </section>
+
+                    @if($this->entitySuggestion)
+                        <section class="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <h3 class="text-[10px] font-semibold uppercase tracking-wider text-amber-700 mb-1">Vorschlag</h3>
+                            <p class="text-[11px] text-[var(--ui-secondary)] m-0 mb-2">
+                                <strong>{{ $this->entitySuggestion['name'] }}</strong>
+                                @if($this->entitySuggestion['type'])
+                                    <span class="text-[var(--ui-muted)]">· {{ $this->entitySuggestion['type'] }}</span>
+                                @endif
+                            </p>
+                            <p class="text-[10px] text-[var(--ui-muted)] m-0 mb-2 italic">{{ $this->entitySuggestion['reason'] }}</p>
+                            <button wire:click="linkEntity({{ $this->entitySuggestion['id'] }})"
+                                    class="w-full inline-flex items-center justify-center gap-1 px-2 py-1 text-[11px] bg-amber-600 text-white rounded hover:bg-amber-700">
+                                @svg('heroicon-o-link', 'w-3 h-3')
+                                Verknüpfen
+                            </button>
+                        </section>
+                    @endif
+
+                    <section>
+                        <h3 class="text-[10px] font-semibold uppercase tracking-wider text-[var(--ui-muted)] mb-2">Entity hinzufügen</h3>
+                        <input
+                            type="search"
+                            wire:model.live.debounce.300ms="entitySearch"
+                            placeholder="Name oder Code..."
+                            class="w-full text-[11px] border border-[var(--ui-border)]/60 rounded px-2 py-1 mb-2"
+                        />
+                        @if(!empty($this->entitySearchResults))
+                            <ul class="space-y-1 list-none p-0 m-0 max-h-64 overflow-y-auto">
+                                @foreach($this->entitySearchResults as $r)
+                                    <li>
+                                        <button wire:click="linkEntity({{ $r['id'] }})"
+                                                class="w-full flex items-center gap-2 px-2 py-1.5 text-left text-[11px] rounded hover:bg-[var(--ui-muted-5)]">
+                                            @svg('heroicon-o-cube', 'w-3.5 h-3.5 text-[var(--ui-muted)] flex-shrink-0')
+                                            <span class="flex-1 min-w-0">
+                                                <span class="block text-[var(--ui-secondary)] truncate font-medium">{{ $r['name'] }}</span>
+                                                @if($r['type'])
+                                                    <span class="block text-[10px] text-[var(--ui-muted)]">{{ $r['type'] }}{{ $r['code'] ? ' · ' . $r['code'] : '' }}</span>
+                                                @endif
+                                            </span>
+                                            @svg('heroicon-o-plus', 'w-3.5 h-3.5 text-[var(--ui-muted)] flex-shrink-0')
+                                        </button>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @elseif(trim($entitySearch) !== '')
+                            <p class="text-[10px] text-[var(--ui-muted)] m-0 italic">Keine Treffer.</p>
+                        @endif
+                    </section>
+                @endif
+
                 <section>
                     <h3 class="text-[10px] font-semibold uppercase tracking-wider text-[var(--ui-muted)] mb-2">Original-Session</h3>
                     <dl class="text-[11px] space-y-1 m-0">
@@ -60,6 +138,7 @@
                         <div class="flex justify-between gap-2"><dt class="text-[var(--ui-muted)]">ID</dt><dd class="text-[var(--ui-secondary)] tabular-nums">{{ $item->source_id }}</dd></div>
                     </dl>
                 </section>
+
             </div>
         </x-ui-page-sidebar>
     </x-slot>

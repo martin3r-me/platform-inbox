@@ -6,6 +6,7 @@ use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Platform\Inbox\Enums\InboxItemStatus;
 use Platform\Inbox\Models\InboxItem;
+use Platform\Inbox\Services\InboxEntityLinkService;
 use Platform\Inbox\Services\InboxSendService;
 
 class Show extends Component
@@ -17,6 +18,8 @@ class Show extends Component
 
     public ?string $sendFeedback = null;
     public bool $sendOk = false;
+
+    public string $entitySearch = '';
 
     public function mount(InboxItem $item): void
     {
@@ -30,6 +33,61 @@ class Show extends Component
     public function canReply(): bool
     {
         return app(InboxSendService::class)->canReply($this->item);
+    }
+
+    #[Computed]
+    public function entityLinkingEnabled(): bool
+    {
+        return app(InboxEntityLinkService::class)->enabled();
+    }
+
+    #[Computed]
+    public function linkedEntities(): array
+    {
+        return app(InboxEntityLinkService::class)->linksFor($this->item);
+    }
+
+    #[Computed]
+    public function entitySuggestion(): ?array
+    {
+        $suggest = app(InboxEntityLinkService::class)->suggestForItem($this->item);
+        if (!$suggest) {
+            return null;
+        }
+        $linkedIds = array_map(fn ($e) => $e['id'], $this->linkedEntities);
+        if (in_array($suggest['id'], $linkedIds, true)) {
+            return null;
+        }
+        return $suggest;
+    }
+
+    #[Computed]
+    public function entitySearchResults(): array
+    {
+        if (trim($this->entitySearch) === '') {
+            return [];
+        }
+        $linkedIds = array_map(fn ($e) => $e['id'], $this->linkedEntities);
+        $results = app(InboxEntityLinkService::class)->search(
+            $this->entitySearch,
+            $this->item->team_id,
+        );
+        return array_values(array_filter($results, fn ($r) => !in_array($r['id'], $linkedIds, true)));
+    }
+
+    public function linkEntity(int $entityId): void
+    {
+        if (app(InboxEntityLinkService::class)->link($this->item, $entityId)) {
+            $this->entitySearch = '';
+            unset($this->linkedEntities, $this->entitySearchResults, $this->entitySuggestion);
+        }
+    }
+
+    public function unlinkEntity(int $entityId): void
+    {
+        if (app(InboxEntityLinkService::class)->unlink($this->item, $entityId)) {
+            unset($this->linkedEntities, $this->entitySearchResults, $this->entitySuggestion);
+        }
     }
 
     public function markDone(): void
@@ -46,7 +104,6 @@ class Show extends Component
         $this->sendFeedback = null;
 
         $channelValue = $this->item->channel?->value;
-        // Calls don't need a body — the dialer is the message.
         $needsBody = in_array($channelValue, ['mail', 'message'], true);
         if ($needsBody) {
             $this->validate([
