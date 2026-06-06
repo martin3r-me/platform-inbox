@@ -14,6 +14,8 @@ use Platform\Inbox\Console\Commands\IngestInboxCommand;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxSenderSubscription;
 use Platform\Inbox\Services\ChannelRouter;
+use Platform\Inbox\Services\Enrichment\EnrichmentProviderRegistry;
+use Platform\Inbox\Services\Enrichment\OpenAiEnrichmentProvider;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 
@@ -24,6 +26,20 @@ class InboxServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__ . '/../config/inbox.php', 'inbox');
 
         $this->app->singleton(ChannelRouter::class);
+
+        $this->app->singleton(EnrichmentProviderRegistry::class, function ($app) {
+            $registry = new EnrichmentProviderRegistry();
+            // Default provider — registered as default fallback.
+            try {
+                if (class_exists(\Platform\Core\Services\OpenAiService::class)) {
+                    $registry->register(new OpenAiEnrichmentProvider(), asDefault: true);
+                }
+            } catch (\Throwable $e) {
+                // OpenAiService not available — registry stays empty; jobs will
+                // record FAILED status instead of crashing.
+            }
+            return $registry;
+        });
 
         if ($this->app->runningInConsole()) {
             $this->commands([

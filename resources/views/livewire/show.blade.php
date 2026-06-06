@@ -161,14 +161,158 @@
         </x-ui-page-sidebar>
     </x-slot>
 
+    @php
+        $enrichment = $item->primaryEnrichment();
+        $output = $enrichment?->output ?? [];
+        $participants = $item->participants()->orderBy('role')->limit(20)->get();
+    @endphp
+
     <div class="flex-1 min-w-0 min-h-0 flex flex-col overflow-auto p-6 space-y-6 max-w-3xl">
-        <div class="bg-white border border-[var(--ui-border)]/40 rounded-lg p-5">
-            @if($item->preview)
-                <div class="text-sm text-[var(--ui-secondary)] whitespace-pre-line leading-relaxed">{{ $item->preview }}</div>
-            @else
-                <p class="text-sm text-[var(--ui-muted)] italic m-0">Keine Vorschau verfügbar.</p>
-            @endif
-        </div>
+        {{-- Anreicherung — TL;DR + Summary + Action Items --}}
+        @if($enrichment)
+            <div class="bg-white border border-[var(--ui-border)]/40 rounded-lg p-5 space-y-4">
+                <div class="flex items-center gap-2">
+                    @svg('heroicon-o-sparkles', 'w-4 h-4 text-[var(--ui-primary)]')
+                    <h2 class="text-sm font-semibold text-[var(--ui-secondary)] m-0">Anreicherung</h2>
+                    <span class="text-[10px] text-[var(--ui-muted)] ml-auto">
+                        {{ $enrichment->template_key }} · {{ $enrichment->provider }}
+                        @if($enrichment->cost_micro_cents !== null)
+                            · {{ number_format($enrichment->cost_micro_cents / 10000, 4, ',', '.') }} ¢
+                        @endif
+                    </span>
+                </div>
+
+                @if(!empty($output['headline']))
+                    <div class="text-base font-semibold text-[var(--ui-secondary)]">{{ $output['headline'] }}</div>
+                @endif
+
+                @if(!empty($output['tldr']))
+                    <div class="text-sm text-[var(--ui-secondary)] leading-relaxed bg-[var(--ui-muted-5)] rounded p-3">
+                        <strong class="text-[10px] uppercase tracking-wider text-[var(--ui-muted)] block mb-1">TL;DR</strong>
+                        {{ $output['tldr'] }}
+                    </div>
+                @endif
+
+                @if(!empty($output['summary']))
+                    <div>
+                        <h3 class="text-[11px] font-semibold uppercase tracking-wider text-[var(--ui-muted)] mb-1">Zusammenfassung</h3>
+                        <p class="text-sm text-[var(--ui-secondary)] leading-relaxed whitespace-pre-line m-0">{{ $output['summary'] }}</p>
+                    </div>
+                @endif
+
+                @if(!empty($output['agenda']))
+                    <div>
+                        <h3 class="text-[11px] font-semibold uppercase tracking-wider text-[var(--ui-muted)] mb-1">Agenda</h3>
+                        <ul class="text-sm text-[var(--ui-secondary)] list-disc list-inside space-y-0.5 m-0">
+                            @foreach($output['agenda'] as $point)
+                                <li>{{ $point }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                @if(!empty($output['action_items']))
+                    <div>
+                        <h3 class="text-[11px] font-semibold uppercase tracking-wider text-[var(--ui-muted)] mb-1">Action Items</h3>
+                        <ul class="space-y-1 m-0 list-none p-0">
+                            @foreach($output['action_items'] as $action)
+                                <li class="flex items-start gap-2 text-sm">
+                                    @svg('heroicon-o-check-circle', 'w-4 h-4 text-[var(--ui-muted)] mt-0.5 flex-shrink-0')
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-[var(--ui-secondary)]">{{ $action['text'] ?? $action }}</div>
+                                        @if(!empty($action['suggested_owner']) || !empty($action['due_hint']))
+                                            <div class="text-[10px] text-[var(--ui-muted)]">
+                                                @if(!empty($action['suggested_owner']))→ {{ $action['suggested_owner'] }}@endif
+                                                @if(!empty($action['due_hint']))<span class="ml-2">⏱ {{ $action['due_hint'] }}</span>@endif
+                                            </div>
+                                        @endif
+                                    </div>
+                                </li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                @if(!empty($output['decisions']))
+                    <div>
+                        <h3 class="text-[11px] font-semibold uppercase tracking-wider text-[var(--ui-muted)] mb-1">Entscheidungen</h3>
+                        <ul class="text-sm text-[var(--ui-secondary)] list-disc list-inside space-y-0.5 m-0">
+                            @foreach($output['decisions'] as $d)
+                                <li>{{ $d }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                @if(!empty($output['open_questions']))
+                    <div>
+                        <h3 class="text-[11px] font-semibold uppercase tracking-wider text-[var(--ui-muted)] mb-1">Offene Fragen</h3>
+                        <ul class="text-sm text-[var(--ui-secondary)] list-disc list-inside space-y-0.5 m-0">
+                            @foreach($output['open_questions'] as $q)
+                                <li>{{ $q }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                @if(!empty($output['topics']))
+                    <div class="flex flex-wrap gap-1">
+                        @foreach($output['topics'] as $topic)
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-[var(--ui-muted-5)] text-[var(--ui-secondary)] rounded">#{{ $topic }}</span>
+                        @endforeach
+                    </div>
+                @endif
+
+                @if(!empty($output['urgency']))
+                    @php
+                        $urg = strtolower($output['urgency']);
+                        $urgColor = match($urg) { 'high' => 'red', 'medium' => 'amber', default => 'gray' };
+                    @endphp
+                    <div class="text-[11px] text-{{ $urgColor }}-600">Dringlichkeit: <strong>{{ ucfirst($urg) }}</strong></div>
+                @endif
+            </div>
+        @elseif($item->enrichments()->count() > 0)
+            <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-[12px] text-amber-800">
+                Anreicherung läuft oder fehlgeschlagen — schau später wieder rein.
+            </div>
+        @endif
+
+        {{-- Beteiligte --}}
+        @if($participants->isNotEmpty())
+            <div class="bg-white border border-[var(--ui-border)]/40 rounded-lg p-5">
+                <h2 class="text-sm font-semibold text-[var(--ui-secondary)] mb-3 flex items-center gap-2">
+                    @svg('heroicon-o-user-group', 'w-4 h-4 text-[var(--ui-primary)]')
+                    Beteiligte
+                </h2>
+                <ul class="space-y-1 m-0 list-none p-0">
+                    @foreach($participants as $p)
+                        <li class="flex items-center gap-2 text-[12px]">
+                            <span class="text-[10px] uppercase text-[var(--ui-muted)] w-20">{{ $p->role }}</span>
+                            <span class="text-[var(--ui-secondary)] truncate flex-1">{{ $p->display_name ?: $p->identifier ?: '—' }}</span>
+                            @if($p->entity_id)
+                                <a href="{{ route('organization.entities.show', $p->entity_id) }}" class="text-[10px] text-blue-600 hover:underline">Entity ↗</a>
+                            @endif
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        {{-- Roh-Inhalt (collapsed by default) --}}
+        @if($item->body || $item->preview)
+            <div class="bg-white border border-[var(--ui-border)]/40 rounded-lg" x-data="{ open: false }">
+                <button @click="open = !open" class="w-full flex items-center justify-between px-5 py-3 text-left">
+                    <h2 class="text-sm font-semibold text-[var(--ui-secondary)] flex items-center gap-2 m-0">
+                        @svg('heroicon-o-document-text', 'w-4 h-4 text-[var(--ui-muted)]')
+                        Original-Inhalt
+                    </h2>
+                    @svg('heroicon-o-chevron-down', 'w-4 h-4 text-[var(--ui-muted)]')
+                </button>
+                <div x-show="open" x-cloak class="px-5 pb-4">
+                    <div class="text-sm text-[var(--ui-secondary)] whitespace-pre-line leading-relaxed">{{ $item->body ?: $item->preview }}</div>
+                </div>
+            </div>
+        @endif
 
         @php
             $channel = $item->channel?->value;

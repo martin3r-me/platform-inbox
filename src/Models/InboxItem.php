@@ -4,15 +4,19 @@ namespace Platform\Inbox\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Platform\Core\Models\Team;
 use Platform\Core\Models\User;
+use Platform\Core\Traits\HasContextFileReferences;
 use Platform\Inbox\Enums\Channel;
 use Platform\Inbox\Enums\InboxItemStatus;
 use Symfony\Component\Uid\UuidV7;
 
 class InboxItem extends Model
 {
+    use HasContextFileReferences;
+
     protected $table = 'inbox_items';
 
     protected $fillable = [
@@ -27,6 +31,11 @@ class InboxItem extends Model
         'sender_label',
         'subject',
         'preview',
+        'body',
+        'body_format',
+        'language',
+        'audio_duration_seconds',
+        'audio_recorded_at',
         'direction',
         'status',
         'snoozed_until',
@@ -40,6 +49,8 @@ class InboxItem extends Model
         'snoozed_until' => 'datetime',
         'handled_at' => 'datetime',
         'received_at' => 'datetime',
+        'audio_recorded_at' => 'datetime',
+        'audio_duration_seconds' => 'integer',
     ];
 
     protected static function booted(): void
@@ -64,6 +75,36 @@ class InboxItem extends Model
     public function source(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    public function enrichments(): HasMany
+    {
+        return $this->hasMany(InboxItemEnrichment::class, 'inbox_item_id');
+    }
+
+    public function participants(): HasMany
+    {
+        return $this->hasMany(InboxItemParticipant::class, 'inbox_item_id');
+    }
+
+    public function primaryEnrichment(): ?InboxItemEnrichment
+    {
+        return $this->enrichments()
+            ->where('is_primary', true)
+            ->where('status', InboxItemEnrichment::STATUS_DONE)
+            ->latest()
+            ->first();
+    }
+
+    /**
+     * Folder convention for any audio attached to this item — kept stable so
+     * lifecycle policies (cleanup, archival) can act on path prefixes.
+     */
+    public function audioFolder(): string
+    {
+        $year = ($this->received_at ?? now())->format('Y');
+        $month = ($this->received_at ?? now())->format('m');
+        return "inbox/audio/{$this->team_id}/{$year}/{$month}";
     }
 
     public function scopeForUser($query, int $userId)

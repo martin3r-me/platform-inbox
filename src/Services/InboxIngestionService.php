@@ -104,6 +104,15 @@ class InboxIngestionService
                 continue;
             }
 
+            // Prefer a full body column on the source session if exposed; otherwise
+            // fall back to the preview field. Long-term, source modules should
+            // persist the full content; the Inbox always treats body as the
+            // canonical input for downstream enrichment.
+            $preview = $cfg['preview_field'] ? ($session[$cfg['preview_field']] ?? null) : null;
+            $body = ($cfg['body_field'] ?? null)
+                ? ($session[$cfg['body_field']] ?? $preview)
+                : $preview;
+
             $inserts[] = [
                 'uuid' => (string) \Symfony\Component\Uid\UuidV7::generate(),
                 'team_id' => $teamId,
@@ -115,7 +124,9 @@ class InboxIngestionService
                 'sender_kind' => $cfg['sender_kind'],
                 'sender_label' => $session['_sender_label'] ?? null,
                 'subject' => $cfg['subject_field'] ? ($session[$cfg['subject_field']] ?? null) : null,
-                'preview' => $cfg['preview_field'] ? ($session[$cfg['preview_field']] ?? null) : null,
+                'preview' => $preview,
+                'body' => $body,
+                'body_format' => $cfg['body_format'] ?? 'text',
                 'direction' => $row->direction,
                 'status' => $status->value,
                 'received_at' => $row->received_at,
@@ -134,8 +145,54 @@ class InboxIngestionService
 
         $this->upsertSubscriptionsForInserts($inserts);
         $this->applyRulesForInserts($sourceMorph, $inserts);
+        $this->dispatchDefaultEnrichmentForInserts($sourceMorph, $inserts);
 
         return count($inserts);
+    }
+
+    /**
+     * For every freshly created item, look up the default enrichment template
+     * for its channel (team-specific overrides global) and dispatch the
+     * RunEnrichmentJob. Items without a template just stay un-enriched.
+     */
+    protected function dispatchDefaultEnrichmentForInserts(string $sourceMorph, array $inserts): void
+    {
+        if (empty($inserts)) {
+            return;
+        }
+
+        $sourceIds = array_unique(array_map(fn ($r) => (int) $r['source_id'], $inserts));
+
+        $items = \Platform\Inbox\Models\InboxItem::query()
+            ->where('source_type', $sourceMorph)
+            ->whereIn('source_id', $sourceIds)
+            ->get();
+
+        // Cache templates per (channel, team) so we don't hammer the DB.
+        $templateCache = [];
+
+        foreach ($items as $item) {
+            $channel = $item->channel?->value;
+            if (!$channel) {
+                continue;
+            }
+            $cacheKey = $channel . '|' . ($item->team_id ?? 0);
+            if (!array_key_exists($cacheKey, $templateCache)) {
+                $templateCache[$cacheKey] = \Platform\Inbox\Models\InboxEnrichmentTemplate::defaultForChannel($channel, $item->team_id);
+            }
+            $template = $templateCache[$cacheKey];
+            if (!$template) {
+                continue;
+            }
+            try {
+                \Platform\Inbox\Jobs\RunEnrichmentJob::dispatch($item->id, $template->id);
+            } catch (\Throwable $e) {
+                \Log::warning('Inbox: enrichment dispatch failed', [
+                    'item_id' => $item->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 
     /**
