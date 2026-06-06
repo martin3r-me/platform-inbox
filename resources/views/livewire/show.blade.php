@@ -50,7 +50,21 @@
         </x-ui-page-sidebar>
     </x-slot>
 
-    <div class="p-6 space-y-6 max-w-3xl">
+    <x-slot name="activity">
+        <x-ui-page-sidebar title="Quelle" icon="heroicon-o-link" width="w-80" :defaultOpen="false" storeKey="activityOpen" side="right">
+            <div class="p-4 space-y-3">
+                <section>
+                    <h3 class="text-[10px] font-semibold uppercase tracking-wider text-[var(--ui-muted)] mb-2">Original-Session</h3>
+                    <dl class="text-[11px] space-y-1 m-0">
+                        <div class="flex justify-between gap-2"><dt class="text-[var(--ui-muted)]">Typ</dt><dd class="text-[var(--ui-secondary)] truncate">{{ $item->source_type }}</dd></div>
+                        <div class="flex justify-between gap-2"><dt class="text-[var(--ui-muted)]">ID</dt><dd class="text-[var(--ui-secondary)] tabular-nums">{{ $item->source_id }}</dd></div>
+                    </dl>
+                </section>
+            </div>
+        </x-ui-page-sidebar>
+    </x-slot>
+
+    <div class="flex-1 min-w-0 min-h-0 flex flex-col overflow-auto p-6 space-y-6 max-w-3xl">
         <div class="bg-white border border-[var(--ui-border)]/40 rounded-lg p-5">
             @if($item->preview)
                 <div class="text-sm text-[var(--ui-secondary)] whitespace-pre-line leading-relaxed">{{ $item->preview }}</div>

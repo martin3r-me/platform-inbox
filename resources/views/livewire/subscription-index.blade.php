@@ -57,7 +57,30 @@
         </x-ui-page-sidebar>
     </x-slot>
 
-    <div class="p-6">
+    <x-slot name="activity">
+        <x-ui-page-sidebar title="Aktivität" icon="heroicon-o-bolt" width="w-80" :defaultOpen="false" storeKey="activityOpen" side="right">
+            <div class="p-4 space-y-3">
+                <section>
+                    <h3 class="text-[10px] font-semibold uppercase tracking-wider text-[var(--ui-muted)] mb-2">Zuletzt gesehen</h3>
+                    @php $recent = $subs->whereNotNull('last_seen_at')->sortByDesc('last_seen_at')->take(8); @endphp
+                    @if($recent->isEmpty())
+                        <p class="text-[11px] text-[var(--ui-muted)] m-0">Noch keine Aktivität.</p>
+                    @else
+                        <ul class="space-y-1 list-none p-0 m-0">
+                            @foreach($recent as $r)
+                                <li class="text-[11px]">
+                                    <div class="text-[var(--ui-secondary)] truncate">{{ $r->label ?: $r->sender_identifier }}</div>
+                                    <div class="text-[10px] text-[var(--ui-muted)]">{{ $r->last_seen_at?->diffForHumans() }}</div>
+                                </li>
+                            @endforeach
+                        </ul>
+                    @endif
+                </section>
+            </div>
+        </x-ui-page-sidebar>
+    </x-slot>
+
+    <div class="flex-1 min-w-0 min-h-0 flex flex-col overflow-auto p-6">
         @if($subs->isEmpty())
             <div class="py-12 text-center rounded-lg border border-dashed border-[var(--ui-border)]/60 bg-[var(--ui-muted-5)]">
                 @svg('heroicon-o-bell', 'w-8 h-8 text-[var(--ui-muted)] mx-auto mb-3')
