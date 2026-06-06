@@ -435,7 +435,19 @@
                                     {{ $p->display_name ?: $p->identifier ?: '—' }}
                                 </span>
                                 @if($p->entity_id)
-                                    <a href="{{ route('organization.entities.show', $p->entity_id) }}" class="text-[10px] text-blue-600 hover:underline">Entity ↗</a>
+                                    @php $isAutoMatch = $isSpeaker && $p->entity_confidence === 'medium'; @endphp
+                                    <a href="{{ route('organization.entities.show', $p->entity_id) }}"
+                                       class="text-[10px] {{ $isAutoMatch ? 'text-amber-700' : 'text-blue-600' }} hover:underline">
+                                        Entity ↗
+                                    </a>
+                                    @if($isAutoMatch)
+                                        <span class="text-[10px] px-1 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded">auto</span>
+                                        <button wire:click="confirmSpeaker('{{ $p->identifier }}')"
+                                                title="Auto-Vorschlag bestätigen — bumpt Voice-Profile-Konfidenz"
+                                                class="text-[10px] px-1.5 py-0.5 bg-green-50 text-green-700 border border-green-200 rounded hover:bg-green-100">
+                                            Bestätigen
+                                        </button>
+                                    @endif
                                     @if($isSpeaker)
                                         <button wire:click="clearSpeaker('{{ $p->identifier }}')"
                                                 title="Zuordnung aufheben"

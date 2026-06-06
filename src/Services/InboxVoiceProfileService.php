@@ -2,6 +2,7 @@
 
 namespace Platform\Inbox\Services;
 
+use Illuminate\Support\Facades\DB;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxItemParticipant;
 use Platform\Inbox\Models\InboxVoiceProfile;
@@ -65,10 +66,70 @@ class InboxVoiceProfileService
 
         $participant->update([
             'entity_id' => $entityId,
-            'entity_confidence' => 1.0,
+            'entity_confidence' => 'high',
             'voice_profile_id' => $profile->id,
         ]);
 
         return $participant->fresh();
+    }
+
+    /**
+     * Lookup a voice profile in this team whose display_name matches the
+     * given name (case-insensitive, trimmed). Returns the most-confirmed
+     * profile when multiple share the same name — the higher confirmed_count,
+     * the more trustworthy.
+     */
+    public function findMatchForSpeaker(int $teamId, ?string $displayName): ?InboxVoiceProfile
+    {
+        if ($displayName === null) {
+            return null;
+        }
+        $normalised = trim($displayName);
+        if ($normalised === '') {
+            return null;
+        }
+
+        return InboxVoiceProfile::query()
+            ->where('team_id', $teamId)
+            ->whereRaw('LOWER(display_name) = ?', [mb_strtolower($normalised)])
+            ->orderByDesc('confirmed_count')
+            ->orderByDesc('last_seen_at')
+            ->first();
+    }
+
+    /**
+     * Walk all speaker participants of an item that still have no entity_id
+     * and try to auto-match them via display_name. Sets entity_confidence
+     * to 'medium' so the UI can distinguish auto-suggestions from
+     * user-confirmed mappings.
+     *
+     * @return int  number of participants auto-matched
+     */
+    public function autoApplyToItem(InboxItem $item): int
+    {
+        $unmapped = InboxItemParticipant::query()
+            ->where('inbox_item_id', $item->id)
+            ->where('role', InboxItemParticipant::ROLE_SPEAKER)
+            ->whereNull('entity_id')
+            ->get();
+
+        $matchedCount = 0;
+        $now = now();
+
+        foreach ($unmapped as $participant) {
+            $profile = $this->findMatchForSpeaker($item->team_id, $participant->display_name);
+            if (!$profile) {
+                continue;
+            }
+            $participant->update([
+                'entity_id' => $profile->entity_id,
+                'entity_confidence' => 'medium',
+                'voice_profile_id' => $profile->id,
+            ]);
+            $profile->update(['last_seen_at' => $now]);
+            $matchedCount++;
+        }
+
+        return $matchedCount;
     }
 }

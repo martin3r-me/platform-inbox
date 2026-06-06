@@ -133,6 +133,21 @@ class InboxAudioIngestionService
         // subscriptions are per-channel and audio doesn't need them.
 
         $this->attachAudioFile($item, $payload['audio_file'] ?? null);
+
+        // Auto-apply voice profiles to speakers whose display_name the
+        // producer didn't already entity-link. Uses case-insensitive match
+        // (better than the exact in-loop fallback above) and sets
+        // entity_confidence='medium' so the UI flags these as suggestions
+        // the user should confirm.
+        try {
+            app(InboxVoiceProfileService::class)->autoApplyToItem($item);
+        } catch (\Throwable $e) {
+            \Log::warning('Inbox: voice-profile auto-apply failed', [
+                'item_id' => $item->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         $this->dispatchDefaultEnrichment($item);
 
         return $item;

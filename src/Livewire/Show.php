@@ -303,6 +303,23 @@ class Show extends Component
         app(InboxVoiceProfileService::class)->assign($this->item, $label, null);
     }
 
+    /**
+     * Promote an auto-suggested speaker mapping (entity_confidence=medium)
+     * to a confirmed one (high) — re-runs the assign path so the underlying
+     * voice profile's confirmed_count gets bumped too.
+     */
+    public function confirmSpeaker(string $label): void
+    {
+        $participant = $this->item->participants()
+            ->where('role', \Platform\Inbox\Models\InboxItemParticipant::ROLE_SPEAKER)
+            ->where('identifier', $label)
+            ->first();
+        if (!$participant || !$participant->entity_id) {
+            return;
+        }
+        app(InboxVoiceProfileService::class)->assign($this->item, $label, (int) $participant->entity_id);
+    }
+
     public function runEnrichment(?int $templateId = null): void
     {
         $templateId = $templateId ?? $this->runTemplateId;
