@@ -55,6 +55,7 @@
             <div class="p-4 space-y-5">
 
                 @if($this->entityLinkingEnabled)
+                    @php $autoLinked = $this->autoLinkedEntities; @endphp
                     <section>
                         <h3 class="text-[10px] font-semibold uppercase tracking-wider text-[var(--ui-muted)] mb-2">Verknüpfte Entities</h3>
                         @if(empty($this->linkedEntities))
@@ -62,13 +63,22 @@
                         @else
                             <ul class="space-y-1 list-none p-0 m-0">
                                 @foreach($this->linkedEntities as $e)
-                                    <li class="flex items-center gap-2 px-2 py-1.5 bg-[var(--ui-muted-5)] rounded text-[11px]">
-                                        @svg('heroicon-o-cube', 'w-3.5 h-3.5 text-[var(--ui-muted)] flex-shrink-0')
+                                    @php $isAuto = isset($autoLinked[$e['id']]); @endphp
+                                    <li class="flex items-center gap-2 px-2 py-1.5 rounded text-[11px] {{ $isAuto ? 'bg-blue-50 border border-blue-100' : 'bg-[var(--ui-muted-5)]' }}">
+                                        @if($isAuto)
+                                            <span title="Über Regel automatisch verknüpft">
+                                                @svg('heroicon-o-bolt', 'w-3.5 h-3.5 text-blue-500 flex-shrink-0')
+                                            </span>
+                                        @else
+                                            @svg('heroicon-o-cube', 'w-3.5 h-3.5 text-[var(--ui-muted)] flex-shrink-0')
+                                        @endif
                                         <div class="flex-1 min-w-0">
                                             <a href="{{ route('organization.entities.show', $e['id']) }}"
                                                class="block text-[var(--ui-secondary)] truncate font-medium hover:underline">{{ $e['name'] }}</a>
                                             @if($e['type'])
-                                                <span class="text-[10px] text-[var(--ui-muted)]">{{ $e['type'] }}</span>
+                                                <span class="text-[10px] text-[var(--ui-muted)]">{{ $e['type'] }}{{ $isAuto ? ' · auto' : '' }}</span>
+                                            @elseif($isAuto)
+                                                <span class="text-[10px] text-[var(--ui-muted)]">auto</span>
                                             @endif
                                         </div>
                                         <button wire:click="unlinkEntity({{ $e['id'] }})" title="Lösen"
@@ -107,6 +117,14 @@
                             placeholder="Name oder Code..."
                             class="w-full text-[11px] border border-[var(--ui-border)]/60 rounded px-2 py-1 mb-2"
                         />
+                        @if($item->sender_identifier)
+                            <label class="flex items-start gap-2 text-[11px] text-[var(--ui-secondary)] mb-2 cursor-pointer">
+                                <input type="checkbox" wire:model="alsoCreateRule" class="rounded border-[var(--ui-border)]/60 mt-0.5" />
+                                <span>
+                                    Auch künftig Items von <strong>{{ Str::limit($item->sender_label ?: $item->sender_identifier, 22) }}</strong> automatisch verknüpfen
+                                </span>
+                            </label>
+                        @endif
                         @if(!empty($this->entitySearchResults))
                             <ul class="space-y-1 list-none p-0 m-0 max-h-64 overflow-y-auto">
                                 @foreach($this->entitySearchResults as $r)

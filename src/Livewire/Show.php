@@ -5,8 +5,10 @@ namespace Platform\Inbox\Livewire;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Platform\Inbox\Enums\InboxItemStatus;
+use Platform\Inbox\Models\InboxAutoLinkEvent;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Services\InboxEntityLinkService;
+use Platform\Inbox\Services\InboxRuleEngine;
 use Platform\Inbox\Services\InboxSendService;
 
 class Show extends Component
@@ -20,6 +22,7 @@ class Show extends Component
     public bool $sendOk = false;
 
     public string $entitySearch = '';
+    public bool $alsoCreateRule = false;
 
     public function mount(InboxItem $item): void
     {
@@ -61,6 +64,20 @@ class Show extends Component
         return $suggest;
     }
 
+    /**
+     * Which currently-linked entities were created by an auto-rule?
+     * @return array<int, true>  entity_id → true
+     */
+    #[Computed]
+    public function autoLinkedEntities(): array
+    {
+        return InboxAutoLinkEvent::query()
+            ->where('inbox_item_id', $this->item->id)
+            ->pluck('entity_id')
+            ->mapWithKeys(fn ($id) => [(int) $id => true])
+            ->all();
+    }
+
     #[Computed]
     public function entitySearchResults(): array
     {
@@ -77,16 +94,30 @@ class Show extends Component
 
     public function linkEntity(int $entityId): void
     {
-        if (app(InboxEntityLinkService::class)->link($this->item, $entityId)) {
-            $this->entitySearch = '';
-            unset($this->linkedEntities, $this->entitySearchResults, $this->entitySuggestion);
+        if (!app(InboxEntityLinkService::class)->link($this->item, $entityId)) {
+            return;
         }
+
+        if ($this->alsoCreateRule && $this->item->sender_identifier) {
+            try {
+                app(InboxRuleEngine::class)->quickRuleFromManualLink($this->item, $entityId);
+            } catch (\Throwable $e) {
+                \Log::warning('Inbox: quick rule creation failed', ['error' => $e->getMessage()]);
+            }
+        }
+
+        $this->entitySearch = '';
+        $this->alsoCreateRule = false;
+        unset($this->linkedEntities, $this->entitySearchResults, $this->entitySuggestion, $this->autoLinkedEntities);
     }
 
     public function unlinkEntity(int $entityId): void
     {
         if (app(InboxEntityLinkService::class)->unlink($this->item, $entityId)) {
-            unset($this->linkedEntities, $this->entitySearchResults, $this->entitySuggestion);
+            InboxAutoLinkEvent::where('inbox_item_id', $this->item->id)
+                ->where('entity_id', $entityId)
+                ->delete();
+            unset($this->linkedEntities, $this->entitySearchResults, $this->entitySuggestion, $this->autoLinkedEntities);
         }
     }
 

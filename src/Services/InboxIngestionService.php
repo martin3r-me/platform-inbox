@@ -133,8 +133,43 @@ class InboxIngestionService
         }
 
         $this->upsertSubscriptionsForInserts($inserts);
+        $this->applyRulesForInserts($sourceMorph, $inserts);
 
         return count($inserts);
+    }
+
+    /**
+     * For every freshly created item, run the rule engine — auto-link to
+     * matching entities and record audit events.
+     */
+    protected function applyRulesForInserts(string $sourceMorph, array $inserts): void
+    {
+        if (empty($inserts)) {
+            return;
+        }
+
+        $sourceIds = array_unique(array_map(fn ($r) => (int) $r['source_id'], $inserts));
+
+        $items = \Platform\Inbox\Models\InboxItem::query()
+            ->where('source_type', $sourceMorph)
+            ->whereIn('source_id', $sourceIds)
+            ->get();
+
+        if ($items->isEmpty()) {
+            return;
+        }
+
+        $engine = app(\Platform\Inbox\Services\InboxRuleEngine::class);
+        foreach ($items as $item) {
+            try {
+                $engine->applyRulesTo($item);
+            } catch (\Throwable $e) {
+                \Log::warning('Inbox: rule application failed', [
+                    'item_id' => $item->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 
     /**

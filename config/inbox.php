@@ -32,6 +32,11 @@ return [
                     'route' => 'inbox.subscriptions',
                     'icon'  => 'heroicon-o-bell',
                 ],
+                [
+                    'label' => 'Regeln',
+                    'route' => 'inbox.rules.index',
+                    'icon'  => 'heroicon-o-funnel',
+                ],
             ],
         ],
     ],
