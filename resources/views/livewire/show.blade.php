@@ -73,22 +73,78 @@
             @endif
         </div>
 
-        <div class="bg-white border border-[var(--ui-border)]/40 rounded-lg p-5 space-y-3">
-            <h2 class="text-sm font-semibold text-[var(--ui-secondary)] flex items-center gap-2">
-                @svg('heroicon-o-pencil-square', 'w-4 h-4 text-[var(--ui-primary)]')
-                Antworten
-            </h2>
-            <input type="text" wire:model="composeSubject" class="w-full text-sm border border-[var(--ui-border)]/60 rounded px-3 py-2" placeholder="Betreff" />
-            <textarea wire:model="composeBody" rows="6" class="w-full text-sm border border-[var(--ui-border)]/60 rounded px-3 py-2" placeholder="Nachricht..."></textarea>
-            <div class="flex justify-between items-center">
-                <span class="text-[11px] text-[var(--ui-muted)]">
-                    Versand erfolgt über den User-Connector — die Antwort landet auch in deinem Original-Posteingang.
-                </span>
-                <x-ui-button variant="primary" size="sm" wire:click="send">
-                    @svg('heroicon-o-paper-airplane', 'w-4 h-4')
-                    <span>Senden</span>
-                </x-ui-button>
+        @php
+            $channel = $item->channel?->value;
+            $canReply = $this->canReply;
+        @endphp
+
+        @if($sendFeedback)
+            <div class="rounded-lg border p-3 text-sm {{ $sendOk ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800' }}">
+                @if($sendOk)
+                    @svg('heroicon-o-check-circle', 'w-4 h-4 inline mr-1')
+                @else
+                    @svg('heroicon-o-exclamation-triangle', 'w-4 h-4 inline mr-1')
+                @endif
+                {{ $sendFeedback }}
             </div>
-        </div>
+        @endif
+
+        @if(!$canReply)
+            <div class="bg-[var(--ui-muted-5)] border border-dashed border-[var(--ui-border)]/60 rounded-lg p-5 text-center">
+                <p class="text-sm text-[var(--ui-muted)] m-0">
+                    Für diesen Kanal ist kein Versand-Handler verfügbar.
+                </p>
+            </div>
+        @elseif($channel === 'call')
+            <div class="bg-white border border-[var(--ui-border)]/40 rounded-lg p-5 space-y-3">
+                <h2 class="text-sm font-semibold text-[var(--ui-secondary)] flex items-center gap-2">
+                    @svg('heroicon-o-phone-arrow-up-right', 'w-4 h-4 text-[var(--ui-primary)]')
+                    Rückruf
+                </h2>
+                <p class="text-[12px] text-[var(--ui-muted)] m-0">
+                    Der Rückruf wird über den jeweiligen Connector initiiert — das Gespräch erscheint im normalen Verlauf des Diensts (Sipgate / RingCentral).
+                </p>
+                <div class="flex justify-end">
+                    <x-ui-button variant="primary" size="sm" wire:click="send">
+                        @svg('heroicon-o-phone-arrow-up-right', 'w-4 h-4')
+                        <span>Jetzt anrufen</span>
+                    </x-ui-button>
+                </div>
+            </div>
+        @elseif($channel === 'meeting')
+            <div class="bg-[var(--ui-muted-5)] border border-dashed border-[var(--ui-border)]/60 rounded-lg p-5 text-center">
+                <p class="text-sm text-[var(--ui-muted)] m-0">
+                    Auf Meeting-Einladungen kannst du derzeit nicht direkt aus der Inbox antworten — öffne sie im Original-Kalender.
+                </p>
+            </div>
+        @else
+            <div class="bg-white border border-[var(--ui-border)]/40 rounded-lg p-5 space-y-3">
+                <h2 class="text-sm font-semibold text-[var(--ui-secondary)] flex items-center gap-2">
+                    @svg('heroicon-o-pencil-square', 'w-4 h-4 text-[var(--ui-primary)]')
+                    Antworten
+                </h2>
+                @if($channel === 'mail')
+                    <input type="text" wire:model="composeSubject" class="w-full text-sm border border-[var(--ui-border)]/60 rounded px-3 py-2" placeholder="Betreff" />
+                @endif
+                <textarea wire:model="composeBody" rows="6" class="w-full text-sm border border-[var(--ui-border)]/60 rounded px-3 py-2"
+                          placeholder="{{ $channel === 'mail' ? 'Nachricht...' : 'SMS-Text...' }}"></textarea>
+                @error('composeBody')
+                    <p class="text-[11px] text-red-600">{{ $message }}</p>
+                @enderror
+                <div class="flex justify-between items-center">
+                    <label class="flex items-center gap-2 text-[11px] text-[var(--ui-muted)]">
+                        <input type="checkbox" wire:model="closeOnSend" class="rounded border-[var(--ui-border)]/60" />
+                        Nach Versand als erledigt markieren
+                    </label>
+                    <x-ui-button variant="primary" size="sm" wire:click="send">
+                        @svg('heroicon-o-paper-airplane', 'w-4 h-4')
+                        <span>Senden</span>
+                    </x-ui-button>
+                </div>
+                <p class="text-[11px] text-[var(--ui-muted)] m-0">
+                    Versand läuft über den User-Connector — die Antwort landet auch in deinem Original-Dienst.
+                </p>
+            </div>
+        @endif
     </div>
 </x-ui-page>

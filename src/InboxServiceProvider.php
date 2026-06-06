@@ -13,6 +13,7 @@ use Platform\Core\Routing\ModuleRouter;
 use Platform\Inbox\Console\Commands\IngestInboxCommand;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxSenderSubscription;
+use Platform\Inbox\Services\ChannelRouter;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 
@@ -21,6 +22,8 @@ class InboxServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__ . '/../config/inbox.php', 'inbox');
+
+        $this->app->singleton(ChannelRouter::class);
 
         if ($this->app->runningInConsole()) {
             $this->commands([
@@ -73,6 +76,112 @@ class InboxServiceProvider extends ServiceProvider
                     ->withoutOverlapping();
             });
         }
+
+        $this->registerDefaultChannelHandlers();
+    }
+
+    /**
+     * Register the default (channel, connector_key) -> send-tool handlers.
+     * Other modules can register more via the same ChannelRouter — this is
+     * a sensible default set so the inbox compose works out of the box.
+     */
+    protected function registerDefaultChannelHandlers(): void
+    {
+        try {
+            $router = $this->app->make(ChannelRouter::class);
+        } catch (\Throwable $e) {
+            return;
+        }
+
+        // mail / microsoft365 — reply uses from_address as recipient.
+        $router->register(
+            channel: 'mail',
+            connectorKey: 'microsoft365',
+            toolName: 'user-connectors.microsoft365.mail.send',
+            argBuilder: function ($item, $session, $connection, $subject, $body) {
+                return [
+                    'connection_id' => (int) $session->connection_id,
+                    'to' => $session->from_address ?? '',
+                    'subject' => $subject !== '' ? $subject : 'Re: ' . ($session->subject ?? ''),
+                    'body' => $body,
+                ];
+            },
+            label: 'E-Mail via Outlook',
+        );
+
+        // message (SMS) / sipgate
+        $router->register(
+            channel: 'message',
+            connectorKey: 'sipgate',
+            toolName: 'user-connectors.sipgate.sms.send',
+            argBuilder: function ($item, $session, $connection, $subject, $body) {
+                return [
+                    'connection_id' => (int) $session->connection_id,
+                    'to' => $this->recipientForMessage($session),
+                    'body' => $body,
+                ];
+            },
+            label: 'SMS via Sipgate',
+        );
+
+        // message (SMS) / ringcentral
+        $router->register(
+            channel: 'message',
+            connectorKey: 'ringcentral',
+            toolName: 'user-connectors.ringcentral.sms.send',
+            argBuilder: function ($item, $session, $connection, $subject, $body) {
+                return [
+                    'connection_id' => (int) $session->connection_id,
+                    'to' => $this->recipientForMessage($session),
+                    'body' => $body,
+                ];
+            },
+            label: 'SMS via RingCentral',
+        );
+
+        // call / sipgate — callback: ignore subject + body, just initiate.
+        $router->register(
+            channel: 'call',
+            connectorKey: 'sipgate',
+            toolName: 'user-connectors.sipgate.calls.initiate',
+            argBuilder: function ($item, $session, $connection, $subject, $body) {
+                return [
+                    'connection_id' => (int) $session->connection_id,
+                    'to' => $this->recipientForCall($session),
+                ];
+            },
+            label: 'Rückruf via Sipgate',
+        );
+
+        // call / ringcentral — callback
+        $router->register(
+            channel: 'call',
+            connectorKey: 'ringcentral',
+            toolName: 'user-connectors.ringcentral.calls.initiate',
+            argBuilder: function ($item, $session, $connection, $subject, $body) {
+                return [
+                    'connection_id' => (int) $session->connection_id,
+                    'to' => $this->recipientForCall($session),
+                ];
+            },
+            label: 'Rückruf via RingCentral',
+        );
+    }
+
+    protected function recipientForMessage(object $session): string
+    {
+        $direction = $session->direction ?? 'inbound';
+        return $direction === 'inbound'
+            ? ($session->from_identifier ?? '')
+            : ($session->to_identifier ?? '');
+    }
+
+    protected function recipientForCall(object $session): string
+    {
+        $direction = $session->direction ?? 'inbound';
+        return $direction === 'inbound'
+            ? ($session->from_number ?? '')
+            : ($session->to_number ?? '');
     }
 
     protected function registerLivewireComponents(): void
