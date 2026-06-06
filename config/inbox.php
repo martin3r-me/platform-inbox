@@ -37,6 +37,11 @@ return [
                     'route' => 'inbox.rules.index',
                     'icon'  => 'heroicon-o-funnel',
                 ],
+                [
+                    'label' => 'Templates',
+                    'route' => 'inbox.templates.index',
+                    'icon'  => 'heroicon-o-sparkles',
+                ],
             ],
         ],
     ],

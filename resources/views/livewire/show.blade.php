@@ -426,11 +426,58 @@
                 </h2>
                 <ul class="space-y-1 m-0 list-none p-0">
                     @foreach($participants as $p)
-                        <li class="flex items-center gap-2 text-[12px]">
-                            <span class="text-[10px] uppercase text-[var(--ui-muted)] w-20">{{ $p->role }}</span>
-                            <span class="text-[var(--ui-secondary)] truncate flex-1">{{ $p->display_name ?: $p->identifier ?: '—' }}</span>
-                            @if($p->entity_id)
-                                <a href="{{ route('organization.entities.show', $p->entity_id) }}" class="text-[10px] text-blue-600 hover:underline">Entity ↗</a>
+                        @php $isSpeaker = $p->role === \Platform\Inbox\Models\InboxItemParticipant::ROLE_SPEAKER; @endphp
+                        <li class="text-[12px]">
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] uppercase text-[var(--ui-muted)] w-20">{{ $p->role }}</span>
+                                <span class="text-[var(--ui-secondary)] truncate flex-1">
+                                    @if($isSpeaker)<span class="text-[10px] text-[var(--ui-muted)] mr-1">[{{ $p->identifier }}]</span>@endif
+                                    {{ $p->display_name ?: $p->identifier ?: '—' }}
+                                </span>
+                                @if($p->entity_id)
+                                    <a href="{{ route('organization.entities.show', $p->entity_id) }}" class="text-[10px] text-blue-600 hover:underline">Entity ↗</a>
+                                    @if($isSpeaker)
+                                        <button wire:click="clearSpeaker('{{ $p->identifier }}')"
+                                                title="Zuordnung aufheben"
+                                                class="text-[10px] text-[var(--ui-muted)] hover:text-red-600">×</button>
+                                    @endif
+                                @elseif($isSpeaker)
+                                    @if($speakerSearchLabel === $p->identifier)
+                                        <button wire:click="closeSpeakerPicker"
+                                                class="text-[10px] text-[var(--ui-muted)]">abbrechen</button>
+                                    @else
+                                        <button wire:click="openSpeakerPicker('{{ $p->identifier }}')"
+                                                title="Person zuordnen"
+                                                class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 border border-[var(--ui-border)]/60 rounded hover:bg-blue-50 hover:border-blue-200">
+                                            @svg('heroicon-o-user-plus', 'w-2.5 h-2.5')
+                                            Person zuordnen
+                                        </button>
+                                    @endif
+                                @endif
+                            </div>
+
+                            @if($isSpeaker && $speakerSearchLabel === $p->identifier)
+                                <div class="mt-1 ml-22 pl-2 border-l-2 border-[var(--ui-primary)]/30">
+                                    <input type="text"
+                                           wire:model.live.debounce.300ms="speakerSearch"
+                                           placeholder="Person suchen…"
+                                           class="w-full text-[11px] border border-[var(--ui-border)]/60 rounded px-2 py-1" />
+                                    @if(!empty($this->speakerSearchResults))
+                                        <ul class="mt-1 m-0 list-none p-0 space-y-0.5">
+                                            @foreach($this->speakerSearchResults as $hit)
+                                                <li>
+                                                    <button wire:click="assignSpeaker('{{ $p->identifier }}', {{ $hit['id'] }})"
+                                                            class="w-full text-left text-[11px] px-2 py-1 rounded hover:bg-[var(--ui-muted-5)] flex justify-between gap-2">
+                                                        <span class="text-[var(--ui-secondary)] truncate">{{ $hit['name'] }}</span>
+                                                        <span class="text-[10px] text-[var(--ui-muted)] flex-shrink-0">{{ $hit['type'] ?? '' }}</span>
+                                                    </button>
+                                                </li>
+                                            @endforeach
+                                        </ul>
+                                    @elseif(trim($speakerSearch) !== '')
+                                        <p class="text-[10px] text-[var(--ui-muted)] mt-1 italic m-0">Keine Treffer.</p>
+                                    @endif
+                                </div>
                             @endif
                         </li>
                     @endforeach

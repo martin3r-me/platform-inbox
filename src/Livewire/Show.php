@@ -14,6 +14,7 @@ use Platform\Inbox\Services\InboxEntityLinkService;
 use Platform\Inbox\Services\InboxHandoffService;
 use Platform\Inbox\Services\InboxRuleEngine;
 use Platform\Inbox\Services\InboxSendService;
+use Platform\Inbox\Services\InboxVoiceProfileService;
 
 class Show extends Component
 {
@@ -27,6 +28,10 @@ class Show extends Component
 
     public string $entitySearch = '';
     public bool $alsoCreateRule = false;
+
+    /** Speaker-label currently being mapped (e.g. "A"). Empty = picker closed. */
+    public string $speakerSearchLabel = '';
+    public string $speakerSearch = '';
 
     /** ID of the enrichment the user wants to view (defaults to primary). */
     public ?int $selectedEnrichmentId = null;
@@ -261,6 +266,41 @@ class Show extends Component
     {
         app(InboxHandoffService::class)->itemToHelpdeskTicket($this->item, auth()->id());
         unset($this->itemLevelHandoffs);
+    }
+
+    public function openSpeakerPicker(string $label): void
+    {
+        $this->speakerSearchLabel = $label;
+        $this->speakerSearch = '';
+    }
+
+    public function closeSpeakerPicker(): void
+    {
+        $this->speakerSearchLabel = '';
+        $this->speakerSearch = '';
+    }
+
+    #[Computed]
+    public function speakerSearchResults(): array
+    {
+        if ($this->speakerSearchLabel === '' || trim($this->speakerSearch) === '') {
+            return [];
+        }
+        return app(InboxEntityLinkService::class)->search(
+            $this->speakerSearch,
+            $this->item->team_id,
+        );
+    }
+
+    public function assignSpeaker(string $label, int $entityId): void
+    {
+        app(InboxVoiceProfileService::class)->assign($this->item, $label, $entityId);
+        $this->closeSpeakerPicker();
+    }
+
+    public function clearSpeaker(string $label): void
+    {
+        app(InboxVoiceProfileService::class)->assign($this->item, $label, null);
     }
 
     public function runEnrichment(?int $templateId = null): void
