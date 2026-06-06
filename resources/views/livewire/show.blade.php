@@ -167,6 +167,10 @@
         $output = $enrichment?->output ?? [];
         $handoffs = $this->handoffsByActionKey;
         $plannerAvailable = $this->plannerAvailable;
+        $helpdeskAvailable = $this->helpdeskAvailable;
+        $itemHandoffs = $this->itemLevelHandoffs;
+        $itemTaskHandoff = $itemHandoffs[\Platform\Inbox\Models\InboxItemHandoff::KIND_PLANNER_TASK] ?? null;
+        $itemTicketHandoff = $itemHandoffs[\Platform\Inbox\Models\InboxItemHandoff::KIND_HELPDESK_TICKET] ?? null;
         $availableTemplates = $this->availableTemplates;
         $participants = $item->participants()->orderBy('role')->limit(20)->get();
         $isRecording = $item->channel?->value === 'recording';
@@ -202,6 +206,45 @@
                     </audio>
                 @else
                     <p class="text-[11px] text-[var(--ui-muted)] m-0 italic">Audio-Datei nicht persistiert — kommt mit Whisper-Audio-Upload-Patch.</p>
+                @endif
+            </div>
+        @endif
+
+        {{-- Item-Level Handoff-Leiste — verfügbar unabhängig von Anreicherung --}}
+        @if($plannerAvailable || $helpdeskAvailable)
+            <div class="flex items-center gap-2 flex-wrap text-[11px]">
+                <span class="text-[10px] uppercase tracking-wider text-[var(--ui-muted)] font-semibold">Weiterleiten</span>
+
+                @if($plannerAvailable)
+                    @if($itemTaskHandoff)
+                        <span class="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 border border-green-200 rounded">
+                            @svg('heroicon-o-check', 'w-3 h-3')
+                            Task #{{ $itemTaskHandoff->target_id }}
+                        </span>
+                    @else
+                        <button wire:click="handoffItemToPlanner"
+                                title="Inbox-Item zu Planner-Task machen"
+                                class="inline-flex items-center gap-1 px-2 py-1 border border-[var(--ui-border)]/60 rounded hover:bg-blue-50 hover:border-blue-200">
+                            @svg('heroicon-o-clipboard-document-list', 'w-3 h-3')
+                            → Task
+                        </button>
+                    @endif
+                @endif
+
+                @if($helpdeskAvailable)
+                    @if($itemTicketHandoff)
+                        <span class="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 border border-green-200 rounded">
+                            @svg('heroicon-o-check', 'w-3 h-3')
+                            Ticket #{{ $itemTicketHandoff->target_id }}
+                        </span>
+                    @else
+                        <button wire:click="handoffItemToHelpdesk"
+                                title="Inbox-Item zu Helpdesk-Ticket machen"
+                                class="inline-flex items-center gap-1 px-2 py-1 border border-[var(--ui-border)]/60 rounded hover:bg-blue-50 hover:border-blue-200">
+                            @svg('heroicon-o-lifebuoy', 'w-3 h-3')
+                            → Ticket
+                        </button>
+                    @endif
                 @endif
             </div>
         @endif

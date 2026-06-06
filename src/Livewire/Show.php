@@ -218,6 +218,22 @@ class Show extends Component
         return app(InboxHandoffService::class)->plannerAvailable();
     }
 
+    #[Computed]
+    public function helpdeskAvailable(): bool
+    {
+        return app(InboxHandoffService::class)->helpdeskAvailable();
+    }
+
+    /**
+     * Item-level handoffs keyed by kind (planner_task → handoff row).
+     * The view uses this to render badges on the top-level handoff bar.
+     */
+    #[Computed]
+    public function itemLevelHandoffs(): array
+    {
+        return app(InboxHandoffService::class)->itemLevelHandoffs($this->item);
+    }
+
     public function handoffActionToPlanner(int $enrichmentId, int $index): void
     {
         $enrichment = InboxItemEnrichment::where('id', $enrichmentId)
@@ -233,6 +249,18 @@ class Show extends Component
             auth()->id(),
         );
         unset($this->handoffsByActionKey);
+    }
+
+    public function handoffItemToPlanner(): void
+    {
+        app(InboxHandoffService::class)->itemToPlannerTask($this->item, auth()->id());
+        unset($this->itemLevelHandoffs);
+    }
+
+    public function handoffItemToHelpdesk(): void
+    {
+        app(InboxHandoffService::class)->itemToHelpdeskTicket($this->item, auth()->id());
+        unset($this->itemLevelHandoffs);
     }
 
     public function runEnrichment(?int $templateId = null): void
