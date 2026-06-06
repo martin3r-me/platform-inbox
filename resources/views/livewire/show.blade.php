@@ -162,8 +162,12 @@
     </x-slot>
 
     @php
-        $enrichment = $item->primaryEnrichment();
+        $allEnrichments = $this->enrichments;
+        $enrichment = $this->activeEnrichment;
         $output = $enrichment?->output ?? [];
+        $handoffs = $this->handoffsByActionKey;
+        $plannerAvailable = $this->plannerAvailable;
+        $availableTemplates = $this->availableTemplates;
         $participants = $item->participants()->orderBy('role')->limit(20)->get();
         $isRecording = $item->channel?->value === 'recording';
         $segments = $isRecording ? $item->segments()->limit(500)->get() : collect();
@@ -205,16 +209,58 @@
         {{-- Anreicherung — TL;DR + Summary + Action Items --}}
         @if($enrichment)
             <div class="bg-white border border-[var(--ui-border)]/40 rounded-lg p-5 space-y-4">
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
                     @svg('heroicon-o-sparkles', 'w-4 h-4 text-[var(--ui-primary)]')
                     <h2 class="text-sm font-semibold text-[var(--ui-secondary)] m-0">Anreicherung</h2>
+
+                    @if($allEnrichments->count() > 1)
+                        <div class="inline-flex rounded-md border border-[var(--ui-border)]/60 overflow-hidden ml-2">
+                            @foreach($allEnrichments as $en)
+                                <button wire:click="selectEnrichment({{ $en->id }})"
+                                        title="{{ $en->provider }}"
+                                        class="px-2 py-0.5 text-[10px] transition-colors {{ $enrichment->id === $en->id ? 'bg-[var(--ui-primary)] text-white font-medium' : 'text-[var(--ui-muted)] hover:bg-[var(--ui-muted-5)]' }} {{ !$loop->first ? 'border-l border-[var(--ui-border)]/60' : '' }}">
+                                    {{ $en->template_key ?: 'unbenannt' }}@if($en->is_primary) ★@endif
+                                </button>
+                            @endforeach
+                        </div>
+                    @endif
+
                     <span class="text-[10px] text-[var(--ui-muted)] ml-auto">
-                        {{ $enrichment->template_key }} · {{ $enrichment->provider }}
+                        {{ $enrichment->template_key }} v{{ $enrichment->template_version }} · {{ $enrichment->provider }}
                         @if($enrichment->cost_micro_cents !== null)
                             · {{ number_format($enrichment->cost_micro_cents / 10000, 4, ',', '.') }} ¢
                         @endif
+                        @if($enrichment->tokens_input || $enrichment->tokens_output)
+                            · {{ $enrichment->tokens_input ?? 0 }}/{{ $enrichment->tokens_output ?? 0 }} tok
+                        @endif
                     </span>
+
+                    @if(!$enrichment->is_primary)
+                        <button wire:click="promoteEnrichment({{ $enrichment->id }})"
+                                title="Als primär markieren"
+                                class="text-[10px] px-2 py-0.5 border border-[var(--ui-border)]/60 rounded hover:bg-[var(--ui-muted-5)]">
+                            ★ Als primär
+                        </button>
+                    @endif
                 </div>
+
+                @if(!empty($availableTemplates))
+                    <div class="flex items-center gap-2 text-[11px] bg-[var(--ui-muted-5)] rounded p-2">
+                        <span class="text-[var(--ui-muted)]">Neu anreichern mit:</span>
+                        <select wire:model="runTemplateId" class="text-[11px] border border-[var(--ui-border)]/60 rounded px-1 py-0.5">
+                            <option value="">— Template wählen —</option>
+                            @foreach($availableTemplates as $tpl)
+                                <option value="{{ $tpl['id'] }}">{{ $tpl['name'] }} (v{{ $tpl['version'] }})</option>
+                            @endforeach
+                        </select>
+                        <button wire:click="runEnrichment"
+                                class="px-2 py-0.5 text-[10px] bg-[var(--ui-primary)] text-white rounded hover:opacity-90 disabled:opacity-40"
+                                @if(!$runTemplateId) disabled @endif>
+                            Starten
+                        </button>
+                        <span class="text-[10px] text-[var(--ui-muted)] ml-auto italic">läuft async</span>
+                    </div>
+                @endif
 
                 @if(!empty($output['headline']))
                     <div class="text-base font-semibold text-[var(--ui-secondary)]">{{ $output['headline'] }}</div>
@@ -249,18 +295,35 @@
                     <div>
                         <h3 class="text-[11px] font-semibold uppercase tracking-wider text-[var(--ui-muted)] mb-1">Action Items</h3>
                         <ul class="space-y-1 m-0 list-none p-0">
-                            @foreach($output['action_items'] as $action)
+                            @foreach($output['action_items'] as $idx => $action)
+                                @php
+                                    $handoffKey = $enrichment->id . ':' . $idx . ':planner_task';
+                                    $existingHandoff = $handoffs[$handoffKey] ?? null;
+                                @endphp
                                 <li class="flex items-start gap-2 text-sm">
                                     @svg('heroicon-o-check-circle', 'w-4 h-4 text-[var(--ui-muted)] mt-0.5 flex-shrink-0')
                                     <div class="flex-1 min-w-0">
-                                        <div class="text-[var(--ui-secondary)]">{{ $action['text'] ?? $action }}</div>
-                                        @if(!empty($action['suggested_owner']) || !empty($action['due_hint']))
+                                        <div class="text-[var(--ui-secondary)]">{{ is_string($action) ? $action : ($action['text'] ?? '') }}</div>
+                                        @if(is_array($action) && (!empty($action['suggested_owner']) || !empty($action['due_hint'])))
                                             <div class="text-[10px] text-[var(--ui-muted)]">
                                                 @if(!empty($action['suggested_owner']))→ {{ $action['suggested_owner'] }}@endif
                                                 @if(!empty($action['due_hint']))<span class="ml-2">⏱ {{ $action['due_hint'] }}</span>@endif
                                             </div>
                                         @endif
                                     </div>
+                                    @if($existingHandoff)
+                                        <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 bg-green-50 text-green-700 border border-green-200 rounded flex-shrink-0">
+                                            @svg('heroicon-o-check', 'w-2.5 h-2.5')
+                                            Task #{{ $existingHandoff->target_id }}
+                                        </span>
+                                    @elseif($plannerAvailable)
+                                        <button wire:click="handoffActionToPlanner({{ $enrichment->id }}, {{ $idx }})"
+                                                title="Zu Planner-Task machen"
+                                                class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 border border-[var(--ui-border)]/60 rounded hover:bg-blue-50 hover:border-blue-200 flex-shrink-0">
+                                            @svg('heroicon-o-plus', 'w-2.5 h-2.5')
+                                            Zu Task
+                                        </button>
+                                    @endif
                                 </li>
                             @endforeach
                         </ul>

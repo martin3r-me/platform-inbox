@@ -5,9 +5,13 @@ namespace Platform\Inbox\Livewire;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Platform\Inbox\Enums\InboxItemStatus;
+use Platform\Inbox\Jobs\RunEnrichmentJob;
 use Platform\Inbox\Models\InboxAutoLinkEvent;
+use Platform\Inbox\Models\InboxEnrichmentTemplate;
 use Platform\Inbox\Models\InboxItem;
+use Platform\Inbox\Models\InboxItemEnrichment;
 use Platform\Inbox\Services\InboxEntityLinkService;
+use Platform\Inbox\Services\InboxHandoffService;
 use Platform\Inbox\Services\InboxRuleEngine;
 use Platform\Inbox\Services\InboxSendService;
 
@@ -23,6 +27,12 @@ class Show extends Component
 
     public string $entitySearch = '';
     public bool $alsoCreateRule = false;
+
+    /** ID of the enrichment the user wants to view (defaults to primary). */
+    public ?int $selectedEnrichmentId = null;
+
+    /** Template the user picked in the "neu anreichern"-Selector. */
+    public ?int $runTemplateId = null;
 
     public function mount(InboxItem $item): void
     {
@@ -119,6 +129,132 @@ class Show extends Component
                 ->delete();
             unset($this->linkedEntities, $this->entitySearchResults, $this->entitySuggestion, $this->autoLinkedEntities);
         }
+    }
+
+    /**
+     * All enrichments for this item, freshest first. Used by the switcher.
+     */
+    #[Computed]
+    public function enrichments(): \Illuminate\Support\Collection
+    {
+        return InboxItemEnrichment::query()
+            ->where('inbox_item_id', $this->item->id)
+            ->orderByDesc('is_primary')
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    /**
+     * The currently-displayed enrichment. Defaults to the primary one;
+     * the user can switch via promoteEnrichment / selectEnrichment.
+     */
+    #[Computed]
+    public function activeEnrichment(): ?InboxItemEnrichment
+    {
+        $all = $this->enrichments;
+        if ($this->selectedEnrichmentId !== null) {
+            $picked = $all->firstWhere('id', $this->selectedEnrichmentId);
+            if ($picked) {
+                return $picked;
+            }
+        }
+        return $all->firstWhere('is_primary', true) ?? $all->first();
+    }
+
+    /**
+     * Templates the user can re-run on this item (channel matches + active).
+     * @return array<int, array{id:int, name:string, version:int, key:string}>
+     */
+    #[Computed]
+    public function availableTemplates(): array
+    {
+        $channel = $this->item->channel?->value;
+        if (!$channel) {
+            return [];
+        }
+        return InboxEnrichmentTemplate::query()
+            ->active()
+            ->forChannel($channel)
+            ->where(function ($q) {
+                $q->whereNull('team_id')->orWhere('team_id', $this->item->team_id);
+            })
+            ->orderBy('name')
+            ->get()
+            ->map(fn ($t) => ['id' => $t->id, 'name' => $t->name, 'version' => $t->version, 'key' => $t->key])
+            ->all();
+    }
+
+    public function selectEnrichment(int $enrichmentId): void
+    {
+        $this->selectedEnrichmentId = $enrichmentId;
+    }
+
+    public function promoteEnrichment(int $enrichmentId): void
+    {
+        $target = InboxItemEnrichment::where('id', $enrichmentId)
+            ->where('inbox_item_id', $this->item->id)
+            ->first();
+        if (!$target) {
+            return;
+        }
+        InboxItemEnrichment::where('inbox_item_id', $this->item->id)
+            ->where('id', '!=', $target->id)
+            ->where('is_primary', true)
+            ->update(['is_primary' => false]);
+        $target->update(['is_primary' => true]);
+        $this->selectedEnrichmentId = $target->id;
+        unset($this->enrichments, $this->activeEnrichment);
+    }
+
+    #[Computed]
+    public function handoffsByActionKey(): array
+    {
+        return app(InboxHandoffService::class)->handoffsForItem($this->item);
+    }
+
+    #[Computed]
+    public function plannerAvailable(): bool
+    {
+        return app(InboxHandoffService::class)->plannerAvailable();
+    }
+
+    public function handoffActionToPlanner(int $enrichmentId, int $index): void
+    {
+        $enrichment = InboxItemEnrichment::where('id', $enrichmentId)
+            ->where('inbox_item_id', $this->item->id)
+            ->first();
+        if (!$enrichment) {
+            return;
+        }
+        app(InboxHandoffService::class)->toPlannerTask(
+            $this->item,
+            $enrichment,
+            $index,
+            auth()->id(),
+        );
+        unset($this->handoffsByActionKey);
+    }
+
+    public function runEnrichment(?int $templateId = null): void
+    {
+        $templateId = $templateId ?? $this->runTemplateId;
+        if (!$templateId) {
+            return;
+        }
+        $template = InboxEnrichmentTemplate::find($templateId);
+        if (!$template) {
+            return;
+        }
+        try {
+            RunEnrichmentJob::dispatch($this->item->id, $template->id, markPrimary: false);
+        } catch (\Throwable $e) {
+            \Log::warning('Inbox: re-run dispatch failed', [
+                'item_id' => $this->item->id,
+                'template_id' => $templateId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+        $this->runTemplateId = null;
     }
 
     public function markDone(): void
