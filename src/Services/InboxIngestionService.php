@@ -132,7 +132,58 @@ class InboxIngestionService
             DB::table('inbox_items')->insert($chunk);
         }
 
+        $this->upsertSubscriptionsForInserts($inserts);
+
         return count($inserts);
+    }
+
+    /**
+     * For every freshly ingested item, ensure a subscription row exists for
+     * (user, sender) — refresh label + last_seen_at, but never touch status
+     * or is_vip on conflict (the user owns those).
+     */
+    protected function upsertSubscriptionsForInserts(array $inserts): void
+    {
+        $rows = [];
+        $seen = [];
+
+        foreach ($inserts as $i) {
+            if (empty($i['sender_identifier']) || empty($i['sender_kind'])) {
+                continue;
+            }
+            $key = $i['user_id'] . '|' . $i['sender_kind'] . '|' . $i['sender_identifier'];
+            // Keep newest only — last write wins for duplicates in this chunk.
+            if (isset($seen[$key]) && $seen[$key] >= $i['received_at']) {
+                continue;
+            }
+            $seen[$key] = $i['received_at'];
+
+            $rows[$key] = [
+                'uuid' => (string) \Symfony\Component\Uid\UuidV7::generate(),
+                'team_id' => $i['team_id'],
+                'user_id' => $i['user_id'],
+                'sender_kind' => $i['sender_kind'],
+                'sender_identifier' => $i['sender_identifier'],
+                'status' => 'subscribed',
+                'is_vip' => false,
+                'label' => $i['sender_label'],
+                'last_seen_at' => $i['received_at'],
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        if (empty($rows)) {
+            return;
+        }
+
+        foreach (array_chunk(array_values($rows), 500) as $chunk) {
+            DB::table('inbox_sender_subscriptions')->upsert(
+                $chunk,
+                ['user_id', 'sender_kind', 'sender_identifier'],
+                ['label', 'last_seen_at', 'updated_at'],
+            );
+        }
     }
 
     protected function fetchSessionFields(string $sessionTable, array $ids, array $cfg): array
@@ -198,15 +249,7 @@ class InboxIngestionService
 
     protected function normalizeSender(?string $value, string $kind): ?string
     {
-        if ($value === null || $value === '') {
-            return null;
-        }
-        return match ($kind) {
-            'email' => strtolower(trim($value)),
-            'phone' => preg_replace('/\D+/', '', $value) ?: null,
-            'teams' => strtolower(trim($value)),
-            default => trim($value),
-        };
+        return \Platform\Inbox\Models\InboxSenderSubscription::normalize($value, $kind);
     }
 
     protected function tableForMorph(string $morph): ?string

@@ -20,6 +20,7 @@ class InboxSenderSubscription extends Model
         'sender_kind',
         'sender_identifier',
         'status',
+        'is_vip',
         'label',
         'notes',
         'last_seen_at',
@@ -27,8 +28,23 @@ class InboxSenderSubscription extends Model
 
     protected $casts = [
         'status' => SubscriptionStatus::class,
+        'is_vip' => 'boolean',
         'last_seen_at' => 'datetime',
     ];
+
+    /** Normalize an identifier consistently across the module. */
+    public static function normalize(?string $value, string $kind): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        return match ($kind) {
+            'email' => strtolower(trim($value)),
+            'phone' => preg_replace('/\D+/', '', $value) ?: null,
+            'teams' => strtolower(trim($value)),
+            default => trim($value),
+        };
+    }
 
     protected static function booted(): void
     {

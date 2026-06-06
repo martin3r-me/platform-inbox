@@ -1,7 +1,9 @@
 @php
     $items = $this->items;
+    $senderMeta = $this->senderMeta;
     $openCount = $items->count();
     $byChannel = $items->groupBy(fn ($i) => $i->channel?->value)->map->count();
+    $vipCount = collect($senderMeta)->filter(fn ($m) => $m['is_vip'] ?? false)->count();
 @endphp
 
 <x-ui-page x-data="{}">
@@ -121,7 +123,11 @@
         @else
             <div class="space-y-2">
                 @foreach($items as $item)
-                    <div class="flex items-center gap-3 p-3 bg-white border border-[var(--ui-border)]/40 rounded-lg hover:shadow-sm transition-shadow">
+                    @php
+                        $meta = $senderMeta[$item->sender_kind . ':' . $item->sender_identifier] ?? null;
+                        $isVip = $meta['is_vip'] ?? false;
+                    @endphp
+                    <div class="flex items-center gap-3 p-3 bg-white border border-[var(--ui-border)]/40 rounded-lg hover:shadow-sm transition-shadow {{ $isVip ? 'ring-1 ring-yellow-300/60' : '' }}">
                         <div class="w-20 flex-shrink-0">
                             <span class="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--ui-muted)]">
                                 @svg($item->channel?->icon() ?? 'heroicon-o-inbox', 'w-3 h-3')
@@ -130,7 +136,10 @@
                         </div>
                         <div class="flex-1 min-w-0">
                             <a href="{{ route('inbox.items.show', $item) }}" class="block">
-                                <div class="text-sm font-medium text-[var(--ui-secondary)] truncate">
+                                <div class="text-sm font-medium text-[var(--ui-secondary)] truncate flex items-center gap-1.5">
+                                    @if($isVip)
+                                        <span title="VIP" class="text-yellow-500 flex-shrink-0">@svg('heroicon-s-star', 'w-3.5 h-3.5')</span>
+                                    @endif
                                     {{ $item->subject ?: $item->sender_label ?: $item->sender_identifier ?: '(ohne Betreff)' }}
                                 </div>
                                 <div class="text-xs text-[var(--ui-muted)] truncate">
@@ -151,9 +160,35 @@
                             <button wire:click="snooze({{ $item->id }}, 4)" title="4h snoozen" class="p-1.5 rounded border border-[var(--ui-border)]/60 hover:bg-yellow-50">
                                 @svg('heroicon-o-clock', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
                             </button>
-                            <button wire:click="ignore({{ $item->id }})" title="Ignorieren" class="p-1.5 rounded border border-[var(--ui-border)]/60 hover:bg-[var(--ui-muted-5)]">
-                                @svg('heroicon-o-x-mark', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
-                            </button>
+                            <div x-data="{ open: false }" class="relative" @click.away="open = false">
+                                <button @click="open = !open" title="Mehr" class="p-1.5 rounded border border-[var(--ui-border)]/60 hover:bg-[var(--ui-muted-5)]">
+                                    @svg('heroicon-o-ellipsis-vertical', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
+                                </button>
+                                <div x-show="open" x-cloak x-transition.origin.top.right
+                                     class="absolute right-0 top-full mt-1 z-30 min-w-52 bg-white border border-[var(--ui-border)]/60 rounded-md shadow-lg py-1 text-[12px]">
+                                    <button wire:click="toggleVip({{ $item->id }})" @click="open = false"
+                                            class="w-full text-left px-3 py-1.5 hover:bg-[var(--ui-muted-5)] flex items-center gap-2">
+                                        @svg('heroicon-o-star', 'w-3.5 h-3.5 ' . ($isVip ? 'text-yellow-500' : 'text-[var(--ui-muted)]'))
+                                        <span>{{ $isVip ? 'VIP entfernen' : 'Als VIP markieren' }}</span>
+                                    </button>
+                                    <button wire:click="muteSender({{ $item->id }})" @click="open = false"
+                                            class="w-full text-left px-3 py-1.5 hover:bg-[var(--ui-muted-5)] flex items-center gap-2">
+                                        @svg('heroicon-o-speaker-x-mark', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
+                                        <span>Absender stummschalten</span>
+                                    </button>
+                                    <button wire:click="unsubscribeSender({{ $item->id }})" @click="open = false"
+                                            class="w-full text-left px-3 py-1.5 hover:bg-red-50 flex items-center gap-2 text-red-600">
+                                        @svg('heroicon-o-no-symbol', 'w-3.5 h-3.5')
+                                        <span>Absender abbestellen</span>
+                                    </button>
+                                    <div class="my-1 border-t border-[var(--ui-border)]/40"></div>
+                                    <button wire:click="ignore({{ $item->id }})" @click="open = false"
+                                            class="w-full text-left px-3 py-1.5 hover:bg-[var(--ui-muted-5)] flex items-center gap-2">
+                                        @svg('heroicon-o-x-mark', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
+                                        <span>Dieses Item ignorieren</span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 @endforeach
