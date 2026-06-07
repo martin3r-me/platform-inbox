@@ -92,8 +92,9 @@ return [
             'subject_field' => 'subject',
             'preview_field' => 'body_preview',
             'received_at_field' => 'start_at',
-            // meeting invites you sent are still useful to see — keep both.
-            'skip_outbound' => false,
+            // Auch hier: outbound = selbst angelegte Einladungen.
+            // Triage-Wert ist null, weil der Termin schon im Kalender steht.
+            'skip_outbound' => true,
         ],
     ],
 ];
