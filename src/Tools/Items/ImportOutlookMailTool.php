@@ -2,6 +2,7 @@
 
 namespace Platform\Inbox\Tools\Items;
 
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Platform\Core\Contracts\ToolContract;
 use Platform\Core\Contracts\ToolContext;
@@ -148,6 +149,9 @@ class ImportOutlookMailTool implements ToolContract, ToolMetadataContract
         ));
 
         $now = now();
+        // MySQL akzeptiert ISO8601 mit "Z" nicht direkt — sauber via Carbon.
+        $receivedAt = !empty($raw['receivedDateTime']) ? Carbon::parse($raw['receivedDateTime']) : null;
+        $sentAt = !empty($raw['sentDateTime']) ? Carbon::parse($raw['sentDateTime']) : null;
 
         // 1) Mail-Session anlegen (oder existierende verwenden).
         $sessionId = $existingSession?->id;
@@ -168,8 +172,8 @@ class ImportOutlookMailTool implements ToolContract, ToolMetadataContract
                 'is_read' => (bool) ($raw['isRead'] ?? false),
                 'has_attachments' => (bool) ($raw['hasAttachments'] ?? false),
                 'is_draft' => (bool) ($raw['isDraft'] ?? false),
-                'received_at' => $raw['receivedDateTime'] ?? null,
-                'sent_at' => $raw['sentDateTime'] ?? null,
+                'received_at' => $receivedAt,
+                'sent_at' => $sentAt,
                 'meta' => json_encode([
                     'body' => $raw['body']['content'] ?? null,
                     'bodyContentType' => $raw['body']['contentType'] ?? null,
@@ -197,7 +201,7 @@ class ImportOutlookMailTool implements ToolContract, ToolMetadataContract
             'body_format' => ($raw['body']['contentType'] ?? 'text') === 'html' ? 'html' : 'text',
             'direction' => 'inbound',
             'status' => $status,
-            'received_at' => $raw['receivedDateTime'] ?? $now,
+            'received_at' => $receivedAt ?? $now,
             'created_at' => $now,
             'updated_at' => $now,
         ]);
