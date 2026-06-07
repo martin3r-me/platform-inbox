@@ -127,6 +127,7 @@ class InboxServiceProvider extends ServiceProvider
             $registry->register(new \Platform\Inbox\Tools\Items\UnlinkEntityTool());
             $registry->register(new \Platform\Inbox\Tools\Items\HandoffTool());
             $registry->register(new \Platform\Inbox\Tools\Items\ReplyItemTool());
+            $registry->register(new \Platform\Inbox\Tools\Items\ForwardItemTool());
         } catch (\Throwable $e) {
             \Log::warning('Inbox: tool registration failed', ['error' => $e->getMessage()]);
         }
