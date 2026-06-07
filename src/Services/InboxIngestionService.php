@@ -308,6 +308,27 @@ class InboxIngestionService
         return $rows;
     }
 
+    /**
+     * Splits a "Kommasepariert"-style address field (text column in
+     * user_connector_* sessions) into a clean list of trimmed addresses.
+     * Defensive — accepts comma- or semicolon-separated input, drops
+     * empty entries.
+     *
+     * @return array<int, string>
+     */
+    protected function splitAddresses(?string $value): array
+    {
+        if ($value === null) {
+            return [];
+        }
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return [];
+        }
+        $parts = preg_split('/[,;]+/', $trimmed) ?: [];
+        return array_values(array_filter(array_map('trim', $parts), fn ($s) => $s !== ''));
+    }
+
     protected function participantRow(string $role, ?string $identifier, ?string $kind, ?string $displayName = null): array
     {
         $normalized = InboxSenderSubscription::normalize($identifier, $kind ?? 'email');
