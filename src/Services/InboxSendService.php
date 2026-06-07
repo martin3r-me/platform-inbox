@@ -73,7 +73,14 @@ class InboxSendService
             $isError = ($array['error'] ?? null) || (($array['success'] ?? null) === false);
 
             if ($isError) {
-                return $this->fail($array['error'] ?? 'Versand fehlgeschlagen.', $array);
+                // ToolResult::toArray serialises errors as ['error' => ['message' => ..., 'code' => ...]],
+                // so we can't pass $array['error'] directly to fail(string).
+                $errorMessage = match (true) {
+                    is_string($array['error'] ?? null) => $array['error'],
+                    is_array($array['error'] ?? null) => (string) ($array['error']['message'] ?? 'Versand fehlgeschlagen.'),
+                    default => 'Versand fehlgeschlagen.',
+                };
+                return $this->fail($errorMessage, $array);
             }
 
             return [
