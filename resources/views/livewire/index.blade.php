@@ -2,6 +2,9 @@
     $items = $this->items;
     $senderMeta = $this->senderMeta;
     $entityLinks = $this->entityLinksByItem;
+    $itemHandoffs = $this->itemHandoffsByItem;
+    $plannerAvailable = $this->plannerAvailable;
+    $helpdeskAvailable = $this->helpdeskAvailable;
     $openCount = $items->count();
     $byChannel = $items->groupBy(fn ($i) => $i->channel?->value)->map->count();
     $vipCount = collect($senderMeta)->filter(fn ($m) => $m['is_vip'] ?? false)->count();
@@ -127,84 +130,167 @@
                     @php
                         $meta = $senderMeta[$item->sender_kind . ':' . $item->sender_identifier] ?? null;
                         $isVip = $meta['is_vip'] ?? false;
+                        $linked = $entityLinks[$item->id] ?? [];
+                        $handoffs = $itemHandoffs[$item->id] ?? [];
+                        $taskHandoff = $handoffs[\Platform\Inbox\Models\InboxItemHandoff::KIND_PLANNER_TASK] ?? null;
+                        $ticketHandoff = $handoffs[\Platform\Inbox\Models\InboxItemHandoff::KIND_HELPDESK_TICKET] ?? null;
+                        $pickerOpen = $entityPickerForItem === $item->id;
                     @endphp
-                    <div class="flex items-center gap-3 p-3 bg-white border border-[var(--ui-border)]/40 rounded-lg hover:shadow-sm transition-shadow {{ $isVip ? 'ring-1 ring-yellow-300/60' : '' }}">
-                        <div class="w-20 flex-shrink-0">
-                            <span class="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--ui-muted)]">
-                                @svg($item->channel?->icon() ?? 'heroicon-o-inbox', 'w-3 h-3')
-                                {{ $item->channel?->label() }}
-                            </span>
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <a href="{{ route('inbox.items.show', $item) }}" class="block">
-                                <div class="text-sm font-medium text-[var(--ui-secondary)] truncate flex items-center gap-1.5">
-                                    @if($isVip)
-                                        <span title="VIP" class="text-yellow-500 flex-shrink-0">@svg('heroicon-s-star', 'w-3.5 h-3.5')</span>
-                                    @endif
-                                    {{ $item->subject ?: $item->sender_label ?: $item->sender_identifier ?: '(ohne Betreff)' }}
-                                </div>
-                                <div class="text-xs text-[var(--ui-muted)] truncate">
-                                    {{ $item->sender_label ?: $item->sender_identifier }}
-                                    @if($item->preview)
-                                        <span class="mx-1">·</span>{{ Str::limit($item->preview, 140) }}
-                                    @endif
-                                </div>
-                            </a>
-                            @php $linked = $entityLinks[$item->id] ?? []; @endphp
-                            @if(!empty($linked))
-                                <div class="flex flex-wrap gap-1 mt-1">
-                                    @foreach(array_slice($linked, 0, 3) as $e)
-                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded">
-                                            @svg('heroicon-o-cube', 'w-2.5 h-2.5')
-                                            {{ Str::limit($e['name'], 20) }}
-                                        </span>
-                                    @endforeach
-                                    @if(count($linked) > 3)
-                                        <span class="text-[10px] text-[var(--ui-muted)]">+ {{ count($linked) - 3 }}</span>
-                                    @endif
-                                </div>
-                            @endif
-                        </div>
-                        <div class="text-[10px] text-[var(--ui-muted)] tabular-nums whitespace-nowrap">
-                            {{ $item->received_at?->diffForHumans() }}
-                        </div>
-                        <div class="flex gap-1 flex-shrink-0">
-                            <button wire:click="markDone({{ $item->id }})" title="Erledigt" class="p-1.5 rounded border border-[var(--ui-border)]/60 hover:bg-green-50">
-                                @svg('heroicon-o-check', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
-                            </button>
-                            <button wire:click="snooze({{ $item->id }}, 4)" title="4h snoozen" class="p-1.5 rounded border border-[var(--ui-border)]/60 hover:bg-yellow-50">
-                                @svg('heroicon-o-clock', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
-                            </button>
-                            <div x-data="{ open: false }" class="relative" @click.away="open = false">
-                                <button @click="open = !open" title="Mehr" class="p-1.5 rounded border border-[var(--ui-border)]/60 hover:bg-[var(--ui-muted-5)]">
-                                    @svg('heroicon-o-ellipsis-vertical', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
+                    <div class="bg-white border border-[var(--ui-border)]/40 rounded-lg hover:shadow-sm transition-shadow {{ $isVip ? 'ring-1 ring-yellow-300/60' : '' }}">
+                        <div class="flex items-center gap-3 p-3">
+                            <div class="w-20 flex-shrink-0">
+                                <span class="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--ui-muted)]">
+                                    @svg($item->channel?->icon() ?? 'heroicon-o-inbox', 'w-3 h-3')
+                                    {{ $item->channel?->label() }}
+                                </span>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <a href="{{ route('inbox.items.show', $item) }}" class="block">
+                                    <div class="text-sm font-medium text-[var(--ui-secondary)] truncate flex items-center gap-1.5">
+                                        @if($isVip)
+                                            <span title="VIP" class="text-yellow-500 flex-shrink-0">@svg('heroicon-s-star', 'w-3.5 h-3.5')</span>
+                                        @endif
+                                        {{ $item->subject ?: $item->sender_label ?: $item->sender_identifier ?: '(ohne Betreff)' }}
+                                    </div>
+                                    <div class="text-xs text-[var(--ui-muted)] truncate">
+                                        {{ $item->sender_label ?: $item->sender_identifier }}
+                                        @if($item->preview)
+                                            <span class="mx-1">·</span>{{ Str::limit($item->preview, 140) }}
+                                        @endif
+                                    </div>
+                                </a>
+                                @if(!empty($linked))
+                                    <div class="flex flex-wrap gap-1 mt-1">
+                                        @foreach($linked as $e)
+                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded group">
+                                                @svg('heroicon-o-cube', 'w-2.5 h-2.5')
+                                                {{ Str::limit($e['name'], 24) }}
+                                                <button wire:click="unlinkEntityFromRow({{ $item->id }}, {{ $e['id'] }})"
+                                                        title="Verknüpfung aufheben"
+                                                        class="opacity-50 hover:opacity-100 hover:text-red-600 ml-0.5">×</button>
+                                            </span>
+                                        @endforeach
+                                    </div>
+                                @endif
+                            </div>
+                            <div class="text-[10px] text-[var(--ui-muted)] tabular-nums whitespace-nowrap">
+                                {{ $item->received_at?->diffForHumans() }}
+                            </div>
+
+                            {{-- Inline action bar — three groups, all visible --}}
+                            <div class="flex items-center gap-1 flex-shrink-0">
+
+                                {{-- Group 1 · Triage --}}
+                                <button wire:click="markDone({{ $item->id }})" title="Erledigt"
+                                        class="p-1.5 rounded border border-[var(--ui-border)]/60 hover:bg-green-50 hover:border-green-200">
+                                    @svg('heroicon-o-check', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
                                 </button>
-                                <div x-show="open" x-cloak x-transition.origin.top.right
-                                     class="absolute right-0 top-full mt-1 z-30 min-w-52 bg-white border border-[var(--ui-border)]/60 rounded-md shadow-lg py-1 text-[12px]">
-                                    <button wire:click="toggleVip({{ $item->id }})" @click="open = false"
-                                            class="w-full text-left px-3 py-1.5 hover:bg-[var(--ui-muted-5)] flex items-center gap-2">
-                                        @svg('heroicon-o-star', 'w-3.5 h-3.5 ' . ($isVip ? 'text-yellow-500' : 'text-[var(--ui-muted)]'))
-                                        <span>{{ $isVip ? 'VIP entfernen' : 'Als VIP markieren' }}</span>
-                                    </button>
-                                    <button wire:click="muteSender({{ $item->id }})" @click="open = false"
-                                            class="w-full text-left px-3 py-1.5 hover:bg-[var(--ui-muted-5)] flex items-center gap-2">
-                                        @svg('heroicon-o-speaker-x-mark', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
-                                        <span>Absender stummschalten</span>
-                                    </button>
-                                    <button wire:click="unsubscribeSender({{ $item->id }})" @click="open = false"
-                                            class="w-full text-left px-3 py-1.5 hover:bg-red-50 flex items-center gap-2 text-red-600">
-                                        @svg('heroicon-o-no-symbol', 'w-3.5 h-3.5')
-                                        <span>Absender abbestellen</span>
-                                    </button>
-                                    <div class="my-1 border-t border-[var(--ui-border)]/40"></div>
-                                    <button wire:click="ignore({{ $item->id }})" @click="open = false"
-                                            class="w-full text-left px-3 py-1.5 hover:bg-[var(--ui-muted-5)] flex items-center gap-2">
-                                        @svg('heroicon-o-x-mark', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
-                                        <span>Dieses Item ignorieren</span>
-                                    </button>
-                                </div>
+                                <button wire:click="snooze({{ $item->id }}, 4)" title="4h snoozen"
+                                        class="p-1.5 rounded border border-[var(--ui-border)]/60 hover:bg-yellow-50 hover:border-yellow-200">
+                                    @svg('heroicon-o-clock', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
+                                </button>
+                                <button wire:click="ignore({{ $item->id }})" title="Ignorieren"
+                                        class="p-1.5 rounded border border-[var(--ui-border)]/60 hover:bg-[var(--ui-muted-5)]">
+                                    @svg('heroicon-o-x-mark', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
+                                </button>
+
+                                <div class="w-px h-5 bg-[var(--ui-border)]/40 mx-0.5"></div>
+
+                                {{-- Group 2 · Handoff --}}
+                                @if($plannerAvailable)
+                                    @if($taskHandoff)
+                                        <span title="Bereits als Task #{{ $taskHandoff->target_id }} angelegt"
+                                              class="inline-flex items-center gap-0.5 px-1.5 py-1 bg-green-50 text-green-700 border border-green-200 rounded text-[10px]">
+                                            @svg('heroicon-o-clipboard-document-check', 'w-3 h-3')
+                                            #{{ $taskHandoff->target_id }}
+                                        </span>
+                                    @else
+                                        <button wire:click="handoffRowToPlanner({{ $item->id }})" title="Als Task anlegen"
+                                                class="p-1.5 rounded border border-[var(--ui-border)]/60 hover:bg-blue-50 hover:border-blue-200">
+                                            @svg('heroicon-o-clipboard-document-list', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
+                                        </button>
+                                    @endif
+                                @endif
+                                @if($helpdeskAvailable)
+                                    @if($ticketHandoff)
+                                        <span title="Bereits als Ticket #{{ $ticketHandoff->target_id }} angelegt"
+                                              class="inline-flex items-center gap-0.5 px-1.5 py-1 bg-green-50 text-green-700 border border-green-200 rounded text-[10px]">
+                                            @svg('heroicon-o-lifebuoy', 'w-3 h-3')
+                                            #{{ $ticketHandoff->target_id }}
+                                        </span>
+                                    @else
+                                        <button wire:click="handoffRowToHelpdesk({{ $item->id }})" title="Als Ticket anlegen"
+                                                class="p-1.5 rounded border border-[var(--ui-border)]/60 hover:bg-blue-50 hover:border-blue-200">
+                                            @svg('heroicon-o-lifebuoy', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
+                                        </button>
+                                    @endif
+                                @endif
+
+                                <div class="w-px h-5 bg-[var(--ui-border)]/40 mx-0.5"></div>
+
+                                {{-- Group 3 · Sender + Entity --}}
+                                <button wire:click="toggleVip({{ $item->id }})" title="{{ $isVip ? 'VIP entfernen' : 'Als VIP markieren' }}"
+                                        class="p-1.5 rounded border border-[var(--ui-border)]/60 hover:bg-yellow-50">
+                                    @svg($isVip ? 'heroicon-s-star' : 'heroicon-o-star', 'w-3.5 h-3.5 ' . ($isVip ? 'text-yellow-500' : 'text-[var(--ui-muted)]'))
+                                </button>
+                                <button wire:click="muteSender({{ $item->id }})" title="Absender stummschalten — künftige Items landen als ignored"
+                                        class="p-1.5 rounded border border-[var(--ui-border)]/60 hover:bg-[var(--ui-muted-5)]">
+                                    @svg('heroicon-o-speaker-x-mark', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
+                                </button>
+                                <button wire:click="unsubscribeSender({{ $item->id }})" title="Absender abbestellen — Sessions werden gar nicht mehr ingested"
+                                        class="p-1.5 rounded border border-[var(--ui-border)]/60 hover:bg-red-50">
+                                    @svg('heroicon-o-no-symbol', 'w-3.5 h-3.5 text-[var(--ui-muted)]')
+                                </button>
+                                <button wire:click="{{ $pickerOpen ? 'closeEntityPicker' : 'openEntityPicker(' . $item->id . ')' }}"
+                                        title="Mit Entity verknüpfen"
+                                        class="p-1.5 rounded border {{ $pickerOpen ? 'bg-blue-50 border-blue-300' : 'border-[var(--ui-border)]/60 hover:bg-blue-50 hover:border-blue-200' }}">
+                                    @svg('heroicon-o-link', 'w-3.5 h-3.5 ' . ($pickerOpen ? 'text-blue-600' : 'text-[var(--ui-muted)]'))
+                                </button>
                             </div>
                         </div>
+
+                        {{-- Inline entity picker — slides under the row --}}
+                        @if($pickerOpen)
+                            <div class="px-3 pb-3 pt-1 border-t border-[var(--ui-border)]/30 bg-blue-50/30 rounded-b-lg">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <input type="text"
+                                           wire:model.live.debounce.300ms="entitySearch"
+                                           placeholder="Entity suchen (Name oder Code)…"
+                                           autofocus
+                                           class="flex-1 text-[12px] border border-[var(--ui-border)]/60 rounded px-2 py-1" />
+                                    @if($item->sender_identifier)
+                                        <label class="flex items-center gap-1 text-[11px] text-[var(--ui-secondary)] whitespace-nowrap">
+                                            <input type="checkbox" wire:model="alsoCreateRule" />
+                                            <span title="Auto-Link-Regel für künftige Items dieses Absenders anlegen">+ Regel</span>
+                                        </label>
+                                    @endif
+                                    <button wire:click="closeEntityPicker" title="Schließen"
+                                            class="p-1 rounded hover:bg-white text-[var(--ui-muted)]">
+                                        @svg('heroicon-o-x-mark', 'w-3.5 h-3.5')
+                                    </button>
+                                </div>
+                                @if(!empty($this->entitySearchResults))
+                                    <ul class="m-0 list-none p-0 space-y-0.5 max-h-48 overflow-y-auto">
+                                        @foreach($this->entitySearchResults as $hit)
+                                            <li>
+                                                <button wire:click="linkEntityFromRow({{ $item->id }}, {{ $hit['id'] }})"
+                                                        class="w-full text-left text-[12px] px-2 py-1.5 rounded hover:bg-white flex items-center justify-between gap-2">
+                                                    <span class="flex items-center gap-2 truncate">
+                                                        @svg('heroicon-o-cube', 'w-3 h-3 text-[var(--ui-muted)] flex-shrink-0')
+                                                        <span class="text-[var(--ui-secondary)] truncate">{{ $hit['name'] }}</span>
+                                                    </span>
+                                                    <span class="text-[10px] text-[var(--ui-muted)] flex-shrink-0 whitespace-nowrap">{{ $hit['type'] ?? '' }}{{ $hit['code'] ? ' · ' . $hit['code'] : '' }}</span>
+                                                </button>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                @elseif(trim($entitySearch) !== '')
+                                    <p class="text-[11px] text-[var(--ui-muted)] italic m-0">Keine Treffer.</p>
+                                @else
+                                    <p class="text-[11px] text-[var(--ui-muted)] italic m-0">Tippen, um Entity zu suchen…</p>
+                                @endif
+                            </div>
+                        @endif
                     </div>
                 @endforeach
             </div>

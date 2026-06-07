@@ -7,13 +7,21 @@ use Livewire\Component;
 use Platform\Inbox\Enums\InboxItemStatus;
 use Platform\Inbox\Enums\SubscriptionStatus;
 use Platform\Inbox\Models\InboxItem;
+use Platform\Inbox\Models\InboxItemHandoff;
 use Platform\Inbox\Models\InboxSenderSubscription;
 use Platform\Inbox\Services\InboxEntityLinkService;
+use Platform\Inbox\Services\InboxHandoffService;
+use Platform\Inbox\Services\InboxRuleEngine;
 
 class Index extends Component
 {
     public string $channel = '';
     public string $search = '';
+
+    /** ID of the row currently showing the inline entity picker; null = none open. */
+    public ?int $entityPickerForItem = null;
+    public string $entitySearch = '';
+    public bool $alsoCreateRule = false;
 
     protected $queryString = [
         'channel' => ['except' => ''],
@@ -99,6 +107,123 @@ class Index extends Component
                 'status' => $s->status?->value,
             ],
         ])->all();
+    }
+
+    /**
+     * Item-level handoffs (planner_task / helpdesk_ticket) for the currently
+     * visible items, keyed by item_id → kind → handoff row. Used to show
+     * "Task #42 angelegt"-badges on the row instead of a fresh action button.
+     */
+    #[Computed]
+    public function itemHandoffsByItem(): array
+    {
+        $ids = $this->items->pluck('id')->all();
+        if (empty($ids)) {
+            return [];
+        }
+        return InboxItemHandoff::query()
+            ->whereIn('inbox_item_id', $ids)
+            ->whereNull('enrichment_id')
+            ->whereNull('action_item_index')
+            ->get()
+            ->groupBy('inbox_item_id')
+            ->map(fn ($group) => $group->keyBy('kind')->all())
+            ->all();
+    }
+
+    #[Computed]
+    public function plannerAvailable(): bool
+    {
+        return app(InboxHandoffService::class)->plannerAvailable();
+    }
+
+    #[Computed]
+    public function helpdeskAvailable(): bool
+    {
+        return app(InboxHandoffService::class)->helpdeskAvailable();
+    }
+
+    public function openEntityPicker(int $itemId): void
+    {
+        $this->entityPickerForItem = $itemId;
+        $this->entitySearch = '';
+        $this->alsoCreateRule = false;
+    }
+
+    public function closeEntityPicker(): void
+    {
+        $this->entityPickerForItem = null;
+        $this->entitySearch = '';
+        $this->alsoCreateRule = false;
+    }
+
+    /**
+     * Entity-search results for the currently-expanded row, with already-linked
+     * entities filtered out so the user can't double-link.
+     */
+    #[Computed]
+    public function entitySearchResults(): array
+    {
+        if ($this->entityPickerForItem === null || trim($this->entitySearch) === '') {
+            return [];
+        }
+        $item = $this->items->firstWhere('id', $this->entityPickerForItem);
+        if (!$item) {
+            return [];
+        }
+        $alreadyLinked = array_map(fn ($e) => $e['id'], $this->entityLinksByItem[$item->id] ?? []);
+        $results = app(InboxEntityLinkService::class)->search($this->entitySearch, $item->team_id);
+        return array_values(array_filter($results, fn ($r) => !in_array($r['id'], $alreadyLinked, true)));
+    }
+
+    public function linkEntityFromRow(int $itemId, int $entityId): void
+    {
+        $item = InboxItem::where('id', $itemId)->where('user_id', auth()->id())->first();
+        if (!$item) {
+            return;
+        }
+        if (!app(InboxEntityLinkService::class)->link($item, $entityId)) {
+            return;
+        }
+        if ($this->alsoCreateRule && $item->sender_identifier) {
+            try {
+                app(InboxRuleEngine::class)->quickRuleFromManualLink($item, $entityId);
+            } catch (\Throwable $e) {
+                \Log::warning('Inbox: quick rule from row failed', ['error' => $e->getMessage()]);
+            }
+        }
+        $this->closeEntityPicker();
+        unset($this->items, $this->entityLinksByItem);
+    }
+
+    public function unlinkEntityFromRow(int $itemId, int $entityId): void
+    {
+        $item = InboxItem::where('id', $itemId)->where('user_id', auth()->id())->first();
+        if (!$item) {
+            return;
+        }
+        app(InboxEntityLinkService::class)->unlink($item, $entityId);
+        unset($this->entityLinksByItem);
+    }
+
+    public function handoffRowToPlanner(int $itemId): void
+    {
+        $item = InboxItem::where('id', $itemId)->where('user_id', auth()->id())->first();
+        if (!$item) {
+            return;
+        }
+        app(InboxHandoffService::class)->itemToPlannerTask($item, auth()->id());
+        unset($this->itemHandoffsByItem);
+    }
+
+    public function handoffRowToHelpdesk(int $itemId): void
+    {
+        $item = InboxItem::where('id', $itemId)->where('user_id', auth()->id())->first();
+        if (!$item) {
+            return;
+        }
+        app(InboxHandoffService::class)->itemToHelpdeskTicket($item, auth()->id());
+        unset($this->itemHandoffsByItem);
     }
 
     public function markDone(int $id): void
