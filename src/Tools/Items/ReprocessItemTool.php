@@ -72,6 +72,7 @@ class ReprocessItemTool implements ToolContract, ToolMetadataContract
         $deletedParticipants = InboxItemParticipant::where('inbox_item_id', $item->id)->delete();
 
         // Insert-Row-Shape rekonstruieren, wie sie der normale Ingest baut.
+        // Inkl. received_at (wird von upsertSubscriptionsForInserts gebraucht).
         $insertRow = [
             'team_id' => $item->team_id,
             'user_id' => $item->user_id,
@@ -82,6 +83,10 @@ class ReprocessItemTool implements ToolContract, ToolMetadataContract
             'sender_kind' => $item->sender_kind,
             'sender_label' => $item->sender_label,
             'direction' => $item->direction,
+            'received_at' => $item->received_at,
+            'subject' => $item->subject,
+            'preview' => $item->preview,
+            'body' => $item->body,
         ];
 
         try {
