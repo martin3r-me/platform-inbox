@@ -119,6 +119,14 @@ class InboxServiceProvider extends ServiceProvider
             $registry->register(new \Platform\Inbox\Tools\Templates\UpsertTemplateTool());
             $registry->register(new \Platform\Inbox\Tools\BackfillInboxTool());
             $registry->register(new \Platform\Inbox\Tools\InboxCountsByChannelTool());
+            $registry->register(new \Platform\Inbox\Tools\Items\ListItemsTool());
+            $registry->register(new \Platform\Inbox\Tools\Items\ShowItemTool());
+            $registry->register(new \Platform\Inbox\Tools\Items\TriageItemsTool());
+            $registry->register(new \Platform\Inbox\Tools\Items\SenderControlTool());
+            $registry->register(new \Platform\Inbox\Tools\Items\LinkEntityTool());
+            $registry->register(new \Platform\Inbox\Tools\Items\UnlinkEntityTool());
+            $registry->register(new \Platform\Inbox\Tools\Items\HandoffTool());
+            $registry->register(new \Platform\Inbox\Tools\Items\ReplyItemTool());
         } catch (\Throwable $e) {
             \Log::warning('Inbox: tool registration failed', ['error' => $e->getMessage()]);
         }
@@ -151,6 +159,26 @@ class InboxServiceProvider extends ServiceProvider
                 ];
             },
             label: 'E-Mail via Outlook',
+        );
+
+        // message / microsoft365 — Teams chat reply via core.comms.
+        // The session carries chat_id directly; we route 1:1 + group chats
+        // the same way Teams does internally. Channel posts would need
+        // (team_id, channel_id) discovered via core.comms.teams.GET — not
+        // available from message-session today, so chat-only for now.
+        $router->register(
+            channel: 'message',
+            connectorKey: 'microsoft365',
+            toolName: 'core.comms.teams_messages.POST',
+            argBuilder: function ($item, $session, $connection, $subject, $body) {
+                return [
+                    'target_type' => 'chat',
+                    'chat_id' => (string) ($session->chat_id ?? ''),
+                    'message' => $body,
+                    'content_type' => 'text',
+                ];
+            },
+            label: 'Teams-Chat-Antwort',
         );
 
         // message (SMS) / sipgate
