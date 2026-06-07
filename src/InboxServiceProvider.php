@@ -117,6 +117,7 @@ class InboxServiceProvider extends ServiceProvider
             $registry->register(new \Platform\Inbox\Tools\Templates\ListTemplatesTool());
             $registry->register(new \Platform\Inbox\Tools\Templates\GetTemplateTool());
             $registry->register(new \Platform\Inbox\Tools\Templates\UpsertTemplateTool());
+            $registry->register(new \Platform\Inbox\Tools\BackfillInboxTool());
         } catch (\Throwable $e) {
             \Log::warning('Inbox: tool registration failed', ['error' => $e->getMessage()]);
         }
