@@ -39,6 +39,30 @@ class InboxIngestionService
         return $created;
     }
 
+    /**
+     * Public entry point for one-shot imports that bypass the time-window
+     * sweep (e.g. ImportOutlookMailTool). Runs the same post-insert hooks
+     * the standard ingest does — subscriptions, auto-link rules,
+     * participant extraction, default enrichment dispatch — so the
+     * imported item ends up identical to one that came in via the
+     * normal pipeline.
+     *
+     * @param array<int, array<string, mixed>> $inserts the rows that were
+     *     just inserted into inbox_items; must contain at minimum
+     *     source_id, user_id, team_id, sender_kind, sender_identifier,
+     *     channel — i.e. the same shape ingestSource builds.
+     */
+    public function processInsertedItems(string $sourceMorph, array $inserts): void
+    {
+        if (empty($inserts)) {
+            return;
+        }
+        $this->upsertSubscriptionsForInserts($inserts);
+        $this->applyRulesForInserts($sourceMorph, $inserts);
+        $this->createParticipantsForInserts($sourceMorph, $inserts);
+        $this->dispatchDefaultEnrichmentForInserts($sourceMorph, $inserts);
+    }
+
     protected function ingestSource(string $sourceMorph, array $cfg, CarbonImmutable $since): int
     {
         $sessionTable = $this->tableForMorph($sourceMorph);

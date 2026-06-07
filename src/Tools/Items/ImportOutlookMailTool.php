@@ -10,6 +10,7 @@ use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
 use Platform\Inbox\Enums\Channel;
 use Platform\Inbox\Enums\InboxItemStatus;
+use Platform\Inbox\Services\InboxIngestionService;
 use Symfony\Component\Uid\UuidV7;
 
 /**
@@ -185,7 +186,7 @@ class ImportOutlookMailTool implements ToolContract, ToolMetadataContract
         }
 
         // 2) Inbox-Item anlegen.
-        $itemId = DB::table('inbox_items')->insertGetId([
+        $insertRow = [
             'uuid' => (string) UuidV7::generate(),
             'team_id' => $teamId,
             'user_id' => $context->user->id,
@@ -204,7 +205,22 @@ class ImportOutlookMailTool implements ToolContract, ToolMetadataContract
             'received_at' => $receivedAt ?? $now,
             'created_at' => $now,
             'updated_at' => $now,
-        ]);
+        ];
+        $itemId = DB::table('inbox_items')->insertGetId($insertRow);
+
+        // 3) Standard-Post-Processing: dieselben Hooks wie bei normalem Ingest
+        //    (Subscriptions, Rules, Participants, Default-Enrichment).
+        try {
+            app(InboxIngestionService::class)->processInsertedItems(
+                'user_connector_mail_session',
+                [$insertRow],
+            );
+        } catch (\Throwable $e) {
+            \Log::warning('Inbox: post-processing für importierte Mail fehlgeschlagen', [
+                'item_id' => $itemId,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         return ToolResult::success([
             'inbox_item_id' => (int) $itemId,
@@ -213,7 +229,7 @@ class ImportOutlookMailTool implements ToolContract, ToolMetadataContract
             'subject' => $raw['subject'] ?? $msg->subject,
             'from' => $fromAddress,
             'received_at' => $raw['receivedDateTime'] ?? null,
-            'message' => 'Mail importiert — als Inbox-Item #' . $itemId . ' verfügbar.',
+            'message' => 'Mail importiert + Enrichment angestoßen — als Inbox-Item #' . $itemId . ' verfügbar.',
         ]);
     }
 
