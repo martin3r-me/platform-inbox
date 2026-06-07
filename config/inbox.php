@@ -61,6 +61,8 @@ return [
             'body_field' => 'body',
             'body_format' => 'text',
             'received_at_field' => 'received_at',
+            // outbound mails are the user's own sends — no triage value, skip.
+            'skip_outbound' => true,
         ],
         'user_connector_call_session' => [
             'channel' => 'call',
@@ -69,6 +71,9 @@ return [
             'subject_field' => null,
             'preview_field' => null,
             'received_at_field' => 'started_at',
+            // calls keep both directions — outbound call-log entries are
+            // useful for retrospective tracking.
+            'skip_outbound' => false,
         ],
         'user_connector_message_session' => [
             'channel' => 'message',
@@ -77,6 +82,8 @@ return [
             'subject_field' => null,
             'preview_field' => 'body_preview',
             'received_at_field' => 'sent_at',
+            // outbound teams messages are the user's own sends — skip.
+            'skip_outbound' => true,
         ],
         'user_connector_meeting_session' => [
             'channel' => 'meeting',
@@ -85,6 +92,8 @@ return [
             'subject_field' => 'subject',
             'preview_field' => 'body_preview',
             'received_at_field' => 'start_at',
+            // meeting invites you sent are still useful to see — keep both.
+            'skip_outbound' => false,
         ],
     ],
 ];

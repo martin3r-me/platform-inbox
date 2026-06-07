@@ -47,10 +47,16 @@ class InboxIngestionService
         }
 
         $receivedField = $cfg['received_at_field'];
+        $skipOutbound = (bool) ($cfg['skip_outbound'] ?? false);
 
         $rows = DB::table($sessionTable . ' as s')
             ->join('user_connector_connections as c', 'c.id', '=', 's.connection_id')
             ->where("s.{$receivedField}", '>=', $since)
+            ->when($skipOutbound, function ($q) {
+                // Skip the user's own sends — they have no triage value and
+                // just create echo items in the inbox.
+                $q->where('s.direction', '!=', 'outbound');
+            })
             ->whereNotExists(function ($q) use ($sourceMorph) {
                 $q->select(DB::raw(1))
                     ->from('inbox_items')
