@@ -162,20 +162,19 @@ class InboxServiceProvider extends ServiceProvider
             label: 'E-Mail via Outlook',
         );
 
-        // message / microsoft365 — Teams chat reply via core.comms.
-        // The session carries chat_id directly; we route 1:1 + group chats
-        // the same way Teams does internally. Channel posts would need
-        // (team_id, channel_id) discovered via core.comms.teams.GET — not
-        // available from message-session today, so chat-only for now.
+        // message / microsoft365 — Teams chat reply via user-connectors
+        // (eigene Connection + OAuth-Token, kein Umweg über core).
+        // Channel-Posts in Teams-Channels brauchten team_id + channel_id,
+        // die in der message_session nicht vorliegen → chat-only.
         $router->register(
             channel: 'message',
             connectorKey: 'microsoft365',
-            toolName: 'core.comms.teams_messages.POST',
+            toolName: 'user-connectors.microsoft365.teams.send',
             argBuilder: function ($item, $session, $connection, $subject, $body) {
                 return [
-                    'target_type' => 'chat',
+                    'connection_id' => (int) $session->connection_id,
                     'chat_id' => (string) ($session->chat_id ?? ''),
-                    'message' => $body,
+                    'body' => $body,
                     'content_type' => 'text',
                 ];
             },
