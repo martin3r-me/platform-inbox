@@ -129,6 +129,7 @@ class InboxServiceProvider extends ServiceProvider
             $registry->register(new \Platform\Inbox\Tools\Items\ReplyItemTool());
             $registry->register(new \Platform\Inbox\Tools\Items\ForwardItemTool());
             $registry->register(new \Platform\Inbox\Tools\Items\RespondEventTool());
+            $registry->register(new \Platform\Inbox\Tools\Items\ImportOutlookMailTool());
         } catch (\Throwable $e) {
             \Log::warning('Inbox: tool registration failed', ['error' => $e->getMessage()]);
         }
