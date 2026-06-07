@@ -83,15 +83,18 @@ class ImportOutlookMailTool implements ToolContract, ToolMetadataContract
             ? InboxItemStatus::Done->value
             : InboxItemStatus::New->value;
 
-        // Resolve the microsoft365 connection.
+        // Resolve the microsoft365 connection. connector_key lives on
+        // user_connectors.key, not on the connections row — join over
+        // connector_id.
         $connectionId = $arguments['connection_id'] ?? null;
         if (!$connectionId) {
-            $connectionId = DB::table('user_connector_connections')
-                ->where('owner_user_id', $context->user->id)
-                ->where('connector_key', 'microsoft365')
-                ->where('status', 'active')
-                ->orderByDesc('id')
-                ->value('id');
+            $connectionId = DB::table('user_connector_connections as c')
+                ->join('user_connectors as uc', 'uc.id', '=', 'c.connector_id')
+                ->where('c.owner_user_id', $context->user->id)
+                ->where('uc.key', 'microsoft365')
+                ->where('c.status', 'active')
+                ->orderByDesc('c.id')
+                ->value('c.id');
         }
         if (!$connectionId) {
             return ToolResult::error('NOT_FOUND', 'Keine aktive microsoft365-Connection für diesen User.');
