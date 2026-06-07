@@ -71,9 +71,11 @@ return [
             'subject_field' => null,
             'preview_field' => null,
             'received_at_field' => 'started_at',
-            // calls keep both directions — outbound call-log entries are
-            // useful for retrospective tracking.
-            'skip_outbound' => false,
+            // Outbound calls = du weisst was du gerufen hast, kein Triage-Wert.
+            // Inbound (angenommen + verpasst) bleibt: angenommene Calls
+            // kommen oft mit Transkript, das ist Triage-relevant; verpasste
+            // brauchen Rückruf-Entscheidung.
+            'skip_outbound' => true,
         ],
         'user_connector_message_session' => [
             'channel' => 'message',
