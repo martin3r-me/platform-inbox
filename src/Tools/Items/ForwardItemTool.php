@@ -12,14 +12,16 @@ use Platform\Inbox\Enums\InboxItemStatus;
 use Platform\Inbox\Models\InboxItem;
 
 /**
- * Native forward of a mail inbox item — resolves the underlying
- * user_connector_mail_session.external_mail_id and delegates to
- * user-connectors.microsoft365.mail.forward, which calls MS Graph's
- * /forward endpoint. Attachments + original body are preserved.
+ * Forward an inbox item through its native provider:
+ *   - mail/microsoft365      → user-connectors.microsoft365.mail.forward
+ *                              (Graph /forward — preserves attachments)
+ *   - message/microsoft365   → user-connectors.microsoft365.teams.chat.forward
+ *                              (quote+send into target chat — Teams has no
+ *                              native chat forward)
  *
- * Currently mail/microsoft365 only — other channels (Teams chat, SMS,
- * recordings) don't have a meaningful "forward" semantic at the
- * provider level.
+ * Argument shape depends on the channel: mail wants recipient addresses
+ * (to[]), Teams wants a target_chat_id. Both close the source item on
+ * success unless close_on_send=false.
  */
 class ForwardItemTool implements ToolContract, ToolMetadataContract
 {
@@ -30,8 +32,10 @@ class ForwardItemTool implements ToolContract, ToolMetadataContract
 
     public function getDescription(): string
     {
-        return 'Leitet ein Inbox-Item nativ über den Provider weiter (aktuell nur mail/microsoft365). '
-            . 'Original-Anhänge und -Body bleiben erhalten. Optional: comment (Intro-Text), close_on_send (default true).';
+        return 'Leitet ein Inbox-Item nativ über den Provider weiter. '
+            . 'Mail: to[] = Empfänger-Adressen (Graph /forward, behält Anhänge). '
+            . 'Teams-Chat: target_chat_id (quote+send in den Ziel-Chat). '
+            . 'Optional: comment (Intro-Text), close_on_send (default true).';
     }
 
     public function getSchema(): array
@@ -42,13 +46,17 @@ class ForwardItemTool implements ToolContract, ToolMetadataContract
                 'item_id' => ['type' => 'integer'],
                 'to' => [
                     'type' => 'array',
-                    'description' => 'Empfänger-Adressen.',
+                    'description' => 'Empfänger-Adressen (nur für mail/microsoft365).',
                     'items' => ['type' => 'string'],
                 ],
-                'comment' => ['type' => 'string', 'description' => 'Optionaler Intro-Text vor dem Original.'],
+                'target_chat_id' => [
+                    'type' => 'string',
+                    'description' => 'Ziel-Chat-ID (nur für message/microsoft365 Teams-Chat).',
+                ],
+                'comment' => ['type' => 'string', 'description' => 'Optionaler Intro-Text.'],
                 'close_on_send' => ['type' => 'boolean', 'description' => 'Default: true.'],
             ],
-            'required' => ['item_id', 'to'],
+            'required' => ['item_id'],
         ];
     }
 
@@ -66,16 +74,34 @@ class ForwardItemTool implements ToolContract, ToolMetadataContract
             return ToolResult::error('NOT_FOUND', 'Item nicht gefunden oder kein Zugriff.');
         }
 
-        // Forward is currently mail-only — other channels lack a Graph-style forward.
-        if ($item->source_type !== 'user_connector_mail_session') {
-            return ToolResult::error('VALIDATION_ERROR', 'Forward ist aktuell nur für mail/microsoft365-Items unterstützt.');
+        $comment = (string) ($arguments['comment'] ?? '');
+        $closeOnSend = $arguments['close_on_send'] ?? true;
+        $registry = app(ToolRegistry::class);
+
+        if ($item->source_type === 'user_connector_mail_session') {
+            return $this->forwardMail($item, $arguments, $context, $registry, $comment, (bool) $closeOnSend);
         }
 
+        if ($item->source_type === 'user_connector_message_session') {
+            return $this->forwardTeamsChat($item, $arguments, $context, $registry, $comment, (bool) $closeOnSend);
+        }
+
+        return ToolResult::error('VALIDATION_ERROR', 'Forward für source_type "' . $item->source_type . '" nicht unterstützt.');
+    }
+
+    protected function forwardMail(
+        InboxItem $item,
+        array $arguments,
+        ToolContext $context,
+        ToolRegistry $registry,
+        string $comment,
+        bool $closeOnSend,
+    ): ToolResult {
         $session = DB::table('user_connector_mail_sessions')
             ->where('id', $item->source_id)
             ->first(['id', 'connection_id', 'external_mail_id']);
         if (!$session || empty($session->external_mail_id)) {
-            return ToolResult::error('NOT_FOUND', 'Keine externe Mail-ID gefunden — Original-Session nicht mehr im user-connectors-Cache.');
+            return ToolResult::error('NOT_FOUND', 'Keine externe Mail-ID gefunden.');
         }
 
         $to = array_values(array_filter(array_map(
@@ -83,53 +109,125 @@ class ForwardItemTool implements ToolContract, ToolMetadataContract
             (array) ($arguments['to'] ?? []),
         )));
         if (empty($to)) {
-            return ToolResult::error('VALIDATION_ERROR', 'to muss mindestens eine Adresse enthalten.');
+            return ToolResult::error('VALIDATION_ERROR', 'to[] muss mindestens eine Empfänger-Adresse enthalten.');
         }
 
-        $comment = (string) ($arguments['comment'] ?? '');
-        $closeOnSend = $arguments['close_on_send'] ?? true;
+        $tool = $registry->get('user-connectors.microsoft365.mail.forward');
+        if (!$tool) {
+            return ToolResult::error('NOT_FOUND', 'mail.forward-Tool nicht registriert.');
+        }
 
         try {
-            $registry = app(ToolRegistry::class);
-            $forwardTool = $registry->get('user-connectors.microsoft365.mail.forward');
-            if (!$forwardTool) {
-                return ToolResult::error('NOT_FOUND', 'user-connectors.microsoft365.mail.forward-Tool nicht registriert.');
-            }
-            $result = $forwardTool->execute([
+            $result = $tool->execute([
                 'connection_id' => (int) $session->connection_id,
                 'external_mail_id' => (string) $session->external_mail_id,
                 'to' => $to,
                 'comment' => $comment,
             ], $context);
         } catch (\Throwable $e) {
-            return ToolResult::error('EXECUTION_ERROR', 'Forward fehlgeschlagen: ' . $e->getMessage());
+            return ToolResult::error('EXECUTION_ERROR', 'Mail-Forward fehlgeschlagen: ' . $e->getMessage());
         }
 
         if (!$result->success) {
-            return ToolResult::error('EXECUTION_ERROR', $result->error ?? 'Forward fehlgeschlagen.');
+            return $this->fail($result);
         }
 
-        if ($closeOnSend) {
-            $item->update([
-                'status' => InboxItemStatus::Done->value,
-                'handled_at' => now(),
-            ]);
-        }
+        $this->maybeClose($item, $closeOnSend);
 
         return ToolResult::success([
             'item_id' => $item->id,
             'forwarded' => true,
+            'channel' => 'mail',
             'recipients' => $to,
-            'closed' => (bool) $closeOnSend,
-            'message' => 'Forward über microsoft365 erfolgreich — Original-Anhänge erhalten.',
+            'closed' => $closeOnSend,
+            'message' => 'Mail-Forward über microsoft365 erfolgreich — Anhänge erhalten.',
         ]);
+    }
+
+    protected function forwardTeamsChat(
+        InboxItem $item,
+        array $arguments,
+        ToolContext $context,
+        ToolRegistry $registry,
+        string $comment,
+        bool $closeOnSend,
+    ): ToolResult {
+        $session = DB::table('user_connector_message_sessions')
+            ->where('id', $item->source_id)
+            ->first(['id', 'connection_id', 'connector_key', 'chat_id', 'external_message_id']);
+        if (!$session) {
+            return ToolResult::error('NOT_FOUND', 'Message-Session nicht gefunden.');
+        }
+        if (($session->connector_key ?? '') !== 'microsoft365') {
+            return ToolResult::error('VALIDATION_ERROR', 'Teams-Forward derzeit nur für microsoft365.');
+        }
+        if (empty($session->chat_id) || empty($session->external_message_id)) {
+            return ToolResult::error('NOT_FOUND', 'chat_id oder external_message_id fehlt auf der Session.');
+        }
+
+        $targetChatId = trim((string) ($arguments['target_chat_id'] ?? ''));
+        if ($targetChatId === '') {
+            return ToolResult::error('VALIDATION_ERROR', 'target_chat_id ist für Teams-Chat-Forward erforderlich.');
+        }
+
+        $tool = $registry->get('user-connectors.microsoft365.teams.chat.forward');
+        if (!$tool) {
+            return ToolResult::error('NOT_FOUND', 'teams.chat.forward-Tool nicht registriert.');
+        }
+
+        try {
+            $result = $tool->execute([
+                'connection_id' => (int) $session->connection_id,
+                'source_chat_id' => (string) $session->chat_id,
+                'source_message_id' => (string) $session->external_message_id,
+                'target_chat_id' => $targetChatId,
+                'comment' => $comment,
+            ], $context);
+        } catch (\Throwable $e) {
+            return ToolResult::error('EXECUTION_ERROR', 'Teams-Forward fehlgeschlagen: ' . $e->getMessage());
+        }
+
+        if (!$result->success) {
+            return $this->fail($result);
+        }
+
+        $this->maybeClose($item, $closeOnSend);
+
+        return ToolResult::success([
+            'item_id' => $item->id,
+            'forwarded' => true,
+            'channel' => 'message',
+            'target_chat_id' => $targetChatId,
+            'closed' => $closeOnSend,
+            'message' => 'Teams-Chat-Forward (quote+send) erfolgreich.',
+        ]);
+    }
+
+    protected function maybeClose(InboxItem $item, bool $closeOnSend): void
+    {
+        if (!$closeOnSend) {
+            return;
+        }
+        $item->update([
+            'status' => InboxItemStatus::Done->value,
+            'handled_at' => now(),
+        ]);
+    }
+
+    protected function fail(ToolResult $result): ToolResult
+    {
+        $err = $result->error;
+        if (is_array($err)) {
+            $err = $err['message'] ?? 'Forward fehlgeschlagen.';
+        }
+        return ToolResult::error('EXECUTION_ERROR', (string) ($err ?? 'Forward fehlgeschlagen.'));
     }
 
     public function getMetadata(): array
     {
         return [
             'category' => 'action',
-            'tags' => ['inbox', 'forward', 'mail', 'microsoft365'],
+            'tags' => ['inbox', 'forward', 'mail', 'teams', 'microsoft365'],
             'read_only' => false,
             'requires_auth' => true,
             'requires_team' => false,

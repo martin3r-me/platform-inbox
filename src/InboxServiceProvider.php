@@ -128,6 +128,7 @@ class InboxServiceProvider extends ServiceProvider
             $registry->register(new \Platform\Inbox\Tools\Items\HandoffTool());
             $registry->register(new \Platform\Inbox\Tools\Items\ReplyItemTool());
             $registry->register(new \Platform\Inbox\Tools\Items\ForwardItemTool());
+            $registry->register(new \Platform\Inbox\Tools\Items\RespondEventTool());
         } catch (\Throwable $e) {
             \Log::warning('Inbox: tool registration failed', ['error' => $e->getMessage()]);
         }
@@ -146,16 +147,16 @@ class InboxServiceProvider extends ServiceProvider
             return;
         }
 
-        // mail / microsoft365 — reply uses from_address as recipient.
+        // mail / microsoft365 — native Graph /reply auf der external_mail_id,
+        // damit Thread + Conversation-ID erhalten bleiben (statt fresh send).
         $router->register(
             channel: 'mail',
             connectorKey: 'microsoft365',
-            toolName: 'user-connectors.microsoft365.mail.send',
+            toolName: 'user-connectors.microsoft365.mail.reply',
             argBuilder: function ($item, $session, $connection, $subject, $body) {
                 return [
                     'connection_id' => (int) $session->connection_id,
-                    'to' => $session->from_address ?? '',
-                    'subject' => $subject !== '' ? $subject : 'Re: ' . ($session->subject ?? ''),
+                    'external_mail_id' => (string) ($session->external_mail_id ?? ''),
                     'body' => $body,
                 ];
             },
