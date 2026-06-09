@@ -523,6 +523,50 @@
             </div>
         @endif
 
+        {{-- Thread-Verlauf — komplette Conversation / Chat-Historie --}}
+        @php $thread = $this->thread; @endphp
+        @if($thread && !empty($thread['messages']))
+            <div class="bg-white border border-[var(--ui-border)]/40 rounded-lg" x-data="{ open: true }">
+                <button @click="open = !open" class="w-full flex items-center justify-between px-5 py-3 text-left">
+                    <h2 class="text-sm font-semibold text-[var(--ui-secondary)] flex items-center gap-2 m-0">
+                        @svg('heroicon-o-chat-bubble-left-right', 'w-4 h-4 text-[var(--ui-primary)]')
+                        Verlauf
+                        <span class="text-[10px] font-normal text-[var(--ui-muted)] ml-1">
+                            {{ count($thread['messages']) }} {{ $thread['kind'] === 'mail' ? 'Mails' : 'Nachrichten' }}
+                        </span>
+                    </h2>
+                    @svg('heroicon-o-chevron-down', 'w-4 h-4 text-[var(--ui-muted)]')
+                </button>
+                <div x-show="open" x-cloak class="px-5 pb-4 space-y-2 max-h-[600px] overflow-y-auto">
+                    @foreach($thread['messages'] as $msg)
+                        @php
+                            $isMail = $thread['kind'] === 'mail';
+                            $isOutbound = ($msg->direction ?? null) === 'outbound';
+                            $from = $isMail
+                                ? trim(($msg->from_name ?? '') . ' <' . ($msg->from_address ?? '') . '>')
+                                : ($msg->from_identifier ?? '–');
+                            $when = $isMail ? $msg->received_at : $msg->sent_at;
+                            $preview = $isMail ? ($msg->body_preview ?? '') : ($msg->body_preview ?? $msg->body ?? '');
+                        @endphp
+                        <div class="text-[12px] border-l-2 {{ $isOutbound ? 'border-blue-300 bg-blue-50/30' : 'border-[var(--ui-border)]/60' }} pl-3 py-1.5">
+                            <div class="flex items-center justify-between gap-2 mb-1">
+                                <span class="font-medium text-[var(--ui-secondary)] truncate">{{ $from }}</span>
+                                <span class="text-[10px] text-[var(--ui-muted)] tabular-nums whitespace-nowrap">
+                                    {{ $when ? \Carbon\Carbon::parse($when)->format('d.m. H:i') : '–' }}
+                                </span>
+                            </div>
+                            @if($isMail && !empty($msg->subject))
+                                <div class="text-[11px] text-[var(--ui-muted)] truncate mb-1">{{ $msg->subject }}</div>
+                            @endif
+                            @if($preview)
+                                <div class="text-[var(--ui-secondary)] whitespace-pre-line leading-snug">{{ \Illuminate\Support\Str::limit(strip_tags($preview), 600) }}</div>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        @endif
+
         {{-- Roh-Inhalt (collapsed by default) --}}
         @if($item->body || $item->preview)
             <div class="bg-white border border-[var(--ui-border)]/40 rounded-lg" x-data="{ open: false }">

@@ -53,6 +53,52 @@ class Show extends Component
         return app(InboxSendService::class)->canReply($this->item);
     }
 
+    /**
+     * Full thread/conversation history for the item:
+     *   - mail items get every mail_session row of the same conversation_id
+     *   - message items get every chat_message of the message_session
+     * Returns null for channels without a thread concept (calls, recordings).
+     */
+    #[Computed]
+    public function thread(): ?array
+    {
+        if ($this->item->source_type === 'user_connector_mail_session'
+            && \Illuminate\Support\Facades\Schema::hasTable('user_connector_mail_sessions')
+        ) {
+            $session = \Illuminate\Support\Facades\DB::table('user_connector_mail_sessions')
+                ->where('id', $this->item->source_id)
+                ->first(['conversation_id', 'connection_id']);
+            if (!$session || !$session->conversation_id) {
+                return null;
+            }
+            $rows = \Illuminate\Support\Facades\DB::table('user_connector_mail_sessions')
+                ->where('connection_id', $session->connection_id)
+                ->where('conversation_id', $session->conversation_id)
+                ->orderBy('received_at')
+                ->get(['id', 'direction', 'from_address', 'from_name', 'subject', 'body_preview', 'received_at', 'is_read']);
+            return [
+                'kind' => 'mail',
+                'messages' => $rows->all(),
+            ];
+        }
+
+        if ($this->item->source_type === 'user_connector_message_session'
+            && \Illuminate\Support\Facades\Schema::hasTable('user_connector_chat_messages')
+        ) {
+            $rows = \Illuminate\Support\Facades\DB::table('user_connector_chat_messages')
+                ->where('message_session_id', $this->item->source_id)
+                ->orderBy('sent_at')
+                ->limit(500)
+                ->get(['from_identifier', 'body_preview', 'body', 'direction', 'sent_at']);
+            return [
+                'kind' => 'chat',
+                'messages' => $rows->all(),
+            ];
+        }
+
+        return null;
+    }
+
     #[Computed]
     public function entityLinkingEnabled(): bool
     {

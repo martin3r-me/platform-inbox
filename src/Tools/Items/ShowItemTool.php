@@ -86,6 +86,11 @@ class ShowItemTool implements ToolContract, ToolMetadataContract
 
         $entities = app(InboxEntityLinkService::class)->linksFor($item);
 
+        // Thread-Verlauf — gibt der Triage Kontext jenseits der letzten
+        // Nachricht. Für Mail: alle Sessions mit derselben conversation_id;
+        // für Teams: alle chat_messages der Session.
+        $thread = $this->fetchThreadHistory($item);
+
         return ToolResult::success([
             'id' => $item->id,
             'channel' => $item->channel?->value,
@@ -114,7 +119,67 @@ class ShowItemTool implements ToolContract, ToolMetadataContract
             'participants' => $participants,
             'linked_entities' => $entities,
             'handoffs' => $handoffs,
+            'thread' => $thread,
         ]);
+    }
+
+    /**
+     * Loads the entire conversation context for the item, channel-aware:
+     *   - mail:    all mail_session rows sharing the conversation_id
+     *   - message: all chat_messages of the message_session
+     * Returns null when no context is available (calls, recordings, …).
+     *
+     * @return array{kind: string, messages: array}|null
+     */
+    protected function fetchThreadHistory(InboxItem $item): ?array
+    {
+        if ($item->source_type === 'user_connector_mail_session' && \Illuminate\Support\Facades\Schema::hasTable('user_connector_mail_sessions')) {
+            $session = \Illuminate\Support\Facades\DB::table('user_connector_mail_sessions')
+                ->where('id', $item->source_id)
+                ->first(['conversation_id', 'connection_id']);
+            if (!$session || !$session->conversation_id) {
+                return null;
+            }
+            $rows = \Illuminate\Support\Facades\DB::table('user_connector_mail_sessions')
+                ->where('connection_id', $session->connection_id)
+                ->where('conversation_id', $session->conversation_id)
+                ->orderBy('received_at')
+                ->get(['id', 'external_mail_id', 'direction', 'from_address', 'from_name', 'subject', 'body_preview', 'received_at', 'is_read']);
+            return [
+                'kind' => 'mail_thread',
+                'messages' => $rows->map(fn ($r) => [
+                    'session_id' => (int) $r->id,
+                    'external_mail_id' => $r->external_mail_id,
+                    'direction' => $r->direction,
+                    'from' => trim((string) ($r->from_name ?? '') . ' <' . (string) ($r->from_address ?? '') . '>'),
+                    'subject' => $r->subject,
+                    'preview' => $r->body_preview,
+                    'received_at' => $r->received_at,
+                    'is_read' => (bool) $r->is_read,
+                ])->all(),
+            ];
+        }
+
+        if ($item->source_type === 'user_connector_message_session' && \Illuminate\Support\Facades\Schema::hasTable('user_connector_chat_messages')) {
+            $rows = \Illuminate\Support\Facades\DB::table('user_connector_chat_messages')
+                ->where('message_session_id', $item->source_id)
+                ->orderBy('sent_at')
+                ->limit(500)
+                ->get(['external_message_id', 'from_identifier', 'from_user_id', 'body_preview', 'body', 'direction', 'sent_at']);
+            return [
+                'kind' => 'chat_thread',
+                'messages' => $rows->map(fn ($r) => [
+                    'external_message_id' => $r->external_message_id,
+                    'from' => $r->from_identifier,
+                    'direction' => $r->direction,
+                    'preview' => $r->body_preview,
+                    'body' => $r->body,
+                    'sent_at' => $r->sent_at,
+                ])->all(),
+            ];
+        }
+
+        return null;
     }
 
     public function getMetadata(): array
