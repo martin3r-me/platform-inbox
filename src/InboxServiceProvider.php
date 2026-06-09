@@ -91,15 +91,26 @@ class InboxServiceProvider extends ServiceProvider
             __DIR__ . '/../config/inbox.php' => config_path('inbox.php'),
         ], 'config');
 
-        // No runningInConsole-Guard — der Schedule wird auch im HTTP-Kontext
-        // registriert, damit Diagnose-Tools (inbox.scheduler.diagnose) den
-        // Event aus dem Schedule-Container ziehen können. Im Web-Request
-        // schadet die Registrierung nicht (es wird nichts ausgeführt — der
-        // Eintrag landet nur im Container-Array).
-        $this->app->afterResolving(Schedule::class, function (Schedule $schedule) {
-            $schedule->command('inbox:ingest --minutes=60')
-                ->everyFiveMinutes()
-                ->withoutOverlapping();
+        // Schedule via $app->booted() registrieren statt afterResolving —
+        // afterResolving feuert nur bei NEUEN Resolves; wenn ein anderer
+        // Provider den Schedule früher aufgelöst hat (z. B. ConsoleSupport),
+        // verpasst unsere Callback den Train und der Cron-Eintrag fehlt
+        // stillschweigend. booted() läuft nach allen Provider-Boots und
+        // greift das real existierende Schedule-Singleton ab. Im HTTP-
+        // Kontext ist das harmlos (der Event landet im Container, wird
+        // aber nie ausgeführt — schedule:run kommt nur aus dem Cron).
+        $this->app->booted(function () {
+            if (!$this->app->bound(Schedule::class)) {
+                return;
+            }
+            try {
+                $this->app->make(Schedule::class)
+                    ->command('inbox:ingest --minutes=60')
+                    ->everyFiveMinutes()
+                    ->withoutOverlapping();
+            } catch (\Throwable $e) {
+                \Log::warning('Inbox: schedule registration failed', ['error' => $e->getMessage()]);
+            }
         });
 
         $this->registerDefaultChannelHandlers();
