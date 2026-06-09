@@ -91,13 +91,16 @@ class InboxServiceProvider extends ServiceProvider
             __DIR__ . '/../config/inbox.php' => config_path('inbox.php'),
         ], 'config');
 
-        if ($this->app->runningInConsole()) {
-            $this->app->afterResolving(Schedule::class, function (Schedule $schedule) {
-                $schedule->command('inbox:ingest --minutes=60')
-                    ->everyFiveMinutes()
-                    ->withoutOverlapping();
-            });
-        }
+        // No runningInConsole-Guard — der Schedule wird auch im HTTP-Kontext
+        // registriert, damit Diagnose-Tools (inbox.scheduler.diagnose) den
+        // Event aus dem Schedule-Container ziehen können. Im Web-Request
+        // schadet die Registrierung nicht (es wird nichts ausgeführt — der
+        // Eintrag landet nur im Container-Array).
+        $this->app->afterResolving(Schedule::class, function (Schedule $schedule) {
+            $schedule->command('inbox:ingest --minutes=60')
+                ->everyFiveMinutes()
+                ->withoutOverlapping();
+        });
 
         $this->registerDefaultChannelHandlers();
         $this->registerTools();
@@ -119,6 +122,8 @@ class InboxServiceProvider extends ServiceProvider
             $registry->register(new \Platform\Inbox\Tools\Templates\UpsertTemplateTool());
             $registry->register(new \Platform\Inbox\Tools\BackfillInboxTool());
             $registry->register(new \Platform\Inbox\Tools\InboxCountsByChannelTool());
+            $registry->register(new \Platform\Inbox\Tools\SchedulerDiagnoseTool());
+            $registry->register(new \Platform\Inbox\Tools\SchedulerUnlockTool());
             $registry->register(new \Platform\Inbox\Tools\Items\ListItemsTool());
             $registry->register(new \Platform\Inbox\Tools\Items\ShowItemTool());
             $registry->register(new \Platform\Inbox\Tools\Items\TriageItemsTool());
