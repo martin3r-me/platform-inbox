@@ -51,6 +51,20 @@ class InboxServiceProvider extends ServiceProvider
             $this->commands([
                 IngestInboxCommand::class,
             ]);
+
+            // Schedule registration mirrors what datawarehouse does and what
+            // actually fires in production: gate on runningInConsole() so the
+            // schedule:run boot is the only path that adds events, and use
+            // app->make(Schedule::class) so the binding is created if missing.
+            // The earlier outside-of-console + bound() guard variant looked
+            // registered in HTTP probes (MCP diagnose saw 1 event) but never
+            // landed in the schedule:run process, so cron silently did nothing.
+            $this->app->booted(function () {
+                $schedule = $this->app->make(Schedule::class);
+                $schedule->command('inbox:ingest --minutes=60')
+                    ->everyFiveMinutes()
+                    ->withoutOverlapping();
+            });
         }
     }
 
@@ -90,28 +104,6 @@ class InboxServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__ . '/../config/inbox.php' => config_path('inbox.php'),
         ], 'config');
-
-        // Schedule via $app->booted() registrieren statt afterResolving —
-        // afterResolving feuert nur bei NEUEN Resolves; wenn ein anderer
-        // Provider den Schedule früher aufgelöst hat (z. B. ConsoleSupport),
-        // verpasst unsere Callback den Train und der Cron-Eintrag fehlt
-        // stillschweigend. booted() läuft nach allen Provider-Boots und
-        // greift das real existierende Schedule-Singleton ab. Im HTTP-
-        // Kontext ist das harmlos (der Event landet im Container, wird
-        // aber nie ausgeführt — schedule:run kommt nur aus dem Cron).
-        $this->app->booted(function () {
-            if (!$this->app->bound(Schedule::class)) {
-                return;
-            }
-            try {
-                $this->app->make(Schedule::class)
-                    ->command('inbox:ingest --minutes=60')
-                    ->everyFiveMinutes()
-                    ->withoutOverlapping();
-            } catch (\Throwable $e) {
-                \Log::warning('Inbox: schedule registration failed', ['error' => $e->getMessage()]);
-            }
-        });
 
         $this->registerDefaultChannelHandlers();
         $this->registerTools();
