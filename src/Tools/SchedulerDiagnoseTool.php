@@ -71,7 +71,7 @@ class SchedulerDiagnoseTool implements ToolContract, ToolMetadataContract
                 'is_locked' => $isLocked,
                 'without_overlapping' => (bool) ($event->withoutOverlapping ?? false),
                 'on_one_server' => (bool) ($event->onOneServer ?? false),
-                'expression_passes_now' => $event->isDue($this->app('events')) ?? null,
+                'expression_passes_now' => $this->safeIsDue($event),
             ];
         }
 
@@ -85,13 +85,14 @@ class SchedulerDiagnoseTool implements ToolContract, ToolMetadataContract
     }
 
     /**
-     * Wrapper around app() that tolerates being called outside Laravel
-     * (e.g. in tests). Keeps the tool itself stateless.
+     * isDue() expects the Application container (to call isDownForMaintenance);
+     * passing the event dispatcher crashes. Wrap and swallow, so a single broken
+     * event can't kill the whole diagnose call.
      */
-    protected function app(string $service): mixed
+    protected function safeIsDue(\Illuminate\Console\Scheduling\Event $event): ?bool
     {
         try {
-            return app($service);
+            return $event->isDue(app());
         } catch (\Throwable) {
             return null;
         }
