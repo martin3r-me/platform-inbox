@@ -6,6 +6,9 @@ use Illuminate\Contracts\View\View;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
 use Livewire\Component;
+use Platform\Inbox\Enums\InboxItemStatus;
+use Platform\Inbox\Models\InboxItem;
+use Platform\Inbox\Services\V2\CockpitDataLoader;
 use Platform\Inbox\Services\V2\SmartBucketService;
 use Platform\Inbox\Services\V2\StreamProjector;
 
@@ -94,6 +97,45 @@ class Inbox extends Component
         return 'empty';
     }
 
+    /**
+     * Resolves the latest InboxItem represented by the current threadKey
+     * (via the stream rows so we don't re-query when selection moves).
+     */
+    protected function currentItem(): ?InboxItem
+    {
+        if (!$this->threadKey || !$this->senderKey) {
+            return null;
+        }
+        $rows = $this->streamRows;
+        $row = collect($rows)->first(
+            fn ($r) => $this->senderKey === $r['sender_kind'] . '|' . $r['sender_identifier'],
+        );
+        if (!$row) {
+            return null;
+        }
+        $thread = collect($row['threads'])->first(function ($t) {
+            $key = $t['thread_key'] ?: ('item-' . $t['latest_item_id']);
+            return $key === $this->threadKey;
+        });
+        if (!$thread) {
+            return null;
+        }
+        return InboxItem::query()
+            ->where('id', $thread['latest_item_id'])
+            ->where('user_id', auth()->id())
+            ->first();
+    }
+
+    #[Computed]
+    public function cockpitData(): ?array
+    {
+        $item = $this->currentItem();
+        if (!$item) {
+            return null;
+        }
+        return app(CockpitDataLoader::class)->load($item);
+    }
+
     /* --------------------------------------------------------------------
        Selection / navigation
        -------------------------------------------------------------------- */
@@ -141,6 +183,41 @@ class Inbox extends Component
     public function toggleSort(): void
     {
         $this->sortMode = $this->sortMode === 'smart' ? 'chronological' : 'smart';
+    }
+
+    /* --------------------------------------------------------------------
+       Verbs — operate on the currently selected thread / item
+       -------------------------------------------------------------------- */
+
+    public function markDone(): void
+    {
+        $item = $this->currentItem();
+        if (!$item) {
+            return;
+        }
+        $item->update([
+            'status' => InboxItemStatus::Done->value,
+            'handled_at' => now(),
+        ]);
+        // Move to the next thread so flow is preserved.
+        $this->threadKey = null;
+        $this->moveThread(1);
+        unset($this->streamRows, $this->bucketCounts, $this->cockpitData);
+    }
+
+    public function snooze(int $hours = 4): void
+    {
+        $item = $this->currentItem();
+        if (!$item) {
+            return;
+        }
+        $item->update([
+            'status' => InboxItemStatus::Snoozed->value,
+            'snoozed_until' => now()->addHours(max(1, $hours)),
+        ]);
+        $this->threadKey = null;
+        $this->moveThread(1);
+        unset($this->streamRows, $this->bucketCounts, $this->cockpitData);
     }
 
     /* --------------------------------------------------------------------

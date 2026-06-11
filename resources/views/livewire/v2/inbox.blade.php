@@ -154,8 +154,22 @@
                                 if (this.wire.senderKey) this.wire.call('toggleExpand', this.wire.senderKey);
                                 break;
                             case '?': e.preventDefault(); this.helpOpen = !this.helpOpen; break;
-                            // d/s/h/l/r/c land here in layer (i) — verbs need a
-                            // selection and channel-aware behaviour, stubbed until then.
+                            // Verbs — only when a thread is selected, otherwise no-op
+                            // so a stray press on the sender list doesn't mark random items.
+                            case 'd':
+                                if (this.wire.threadKey) {
+                                    e.preventDefault();
+                                    this.wire.call('markDone');
+                                }
+                                break;
+                            case 's':
+                                if (this.wire.threadKey) {
+                                    e.preventDefault();
+                                    this.wire.call('snooze', 4);
+                                }
+                                break;
+                            // h/l/r/c land in layers (h) and (i) — channel-aware,
+                            // need pickers, stubbed for now.
                             default: break;
                         }
                     },
