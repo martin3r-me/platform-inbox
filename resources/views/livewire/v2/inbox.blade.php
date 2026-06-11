@@ -1,7 +1,7 @@
 @php
     $buckets = $this->bucketDefs;
     $counts = $this->bucketCounts;
-    $stream = $this->stream;
+    $stream = $this->streamRows;
     $cockpitMode = $this->cockpitMode;
 @endphp
 

@@ -69,7 +69,7 @@ class Inbox extends Component
     }
 
     #[Computed]
-    public function stream(): array
+    public function streamRows(): array
     {
         $userId = auth()->id();
         if (!$userId) {
@@ -149,7 +149,7 @@ class Inbox extends Component
 
     public function moveSender(int $direction): void
     {
-        $rows = $this->stream;
+        $rows = $this->streamRows;
         if (empty($rows)) {
             return;
         }
@@ -169,7 +169,7 @@ class Inbox extends Component
 
     public function moveThread(int $direction): void
     {
-        $rows = $this->stream;
+        $rows = $this->streamRows;
         $row = collect($rows)->first(
             fn ($r) => $this->senderKey === $r['sender_kind'] . '|' . $r['sender_identifier'],
         );
