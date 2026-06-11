@@ -12,8 +12,18 @@
 >
     <x-slot name="navbar">
         <x-ui-page-navbar title="Inbox" icon="heroicon-o-inbox">
-            <div class="flex items-center gap-2 text-[11px] text-[var(--ui-muted)]">
-                <span>Sort:</span>
+            <div class="flex items-center gap-3 text-[11px] text-[var(--ui-muted)]">
+                @php
+                    $activeBucketDef = collect($buckets)->firstWhere('key', $bucket);
+                    $activeCount = $counts[$bucket] ?? 0;
+                @endphp
+                @if($activeBucketDef)
+                    <span class="text-[var(--ui-secondary)]">
+                        <span class="font-medium">{{ $activeBucketDef['label'] }}</span>
+                        <span class="tabular-nums opacity-70">· {{ $activeCount }}</span>
+                    </span>
+                    <span class="opacity-30">|</span>
+                @endif
                 <button
                     wire:click="toggleSort"
                     class="px-2 py-0.5 rounded border border-[var(--ui-border)]/60 hover:bg-[var(--ui-muted-5)] transition"
@@ -25,7 +35,13 @@
                         🕒 Chronologisch
                     @endif
                 </button>
-                <span class="ml-3 opacity-60">? = Tastatur-Hilfe</span>
+                <button
+                    wire:click="toggleHelp"
+                    class="px-2 py-0.5 rounded border border-[var(--ui-border)]/60 hover:bg-[var(--ui-muted-5)] transition flex items-center gap-1"
+                    title="Tastatur-Hilfe (?)"
+                >
+                    <span>?</span>
+                </button>
             </div>
         </x-ui-page-navbar>
     </x-slot>
@@ -117,6 +133,10 @@
         </div>
     </div>
 
+    {{-- Overlays --}}
+    @include('inbox::livewire.v2.partials.keyboard-help')
+    @include('inbox::livewire.v2.partials.snooze-picker')
+
     @push('scripts')
         <script>
             window.inboxV2Keymap = function () {
@@ -153,7 +173,7 @@
                                 e.preventDefault();
                                 if (this.wire.senderKey) this.wire.call('toggleExpand', this.wire.senderKey);
                                 break;
-                            case '?': e.preventDefault(); this.helpOpen = !this.helpOpen; break;
+                            case '?': e.preventDefault(); this.wire.call('toggleHelp'); break;
                             // Verbs — only when a thread is selected, otherwise no-op
                             // so a stray press on the sender list doesn't mark random items.
                             case 'd':
@@ -165,7 +185,7 @@
                             case 's':
                                 if (this.wire.threadKey) {
                                     e.preventDefault();
-                                    this.wire.call('snooze', 4);
+                                    this.wire.call('toggleSnoozePicker');
                                 }
                                 break;
                             case 'r':
@@ -174,8 +194,8 @@
                                     this.wire.call('openReply');
                                 }
                                 break;
-                            // h/l/c land in layer (i) — channel-aware, need pickers,
-                            // stubbed for now.
+                            // h/l/c remain stubs — they need entity/contact pickers
+                            // that will hook into organization + planner modules.
                             default: break;
                         }
                     },

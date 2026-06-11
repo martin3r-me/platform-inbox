@@ -48,8 +48,8 @@
             <button wire:click="markDone" class="px-2.5 py-1 rounded text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 transition flex items-center gap-1" title="Done — d">
                 @svg('heroicon-o-check-circle', 'w-3.5 h-3.5')<span>Done</span><kbd class="text-[9px] opacity-60 ml-1">d</kbd>
             </button>
-            <button wire:click="snooze(4)" class="px-2.5 py-1 rounded text-[11px] font-medium text-amber-700 hover:bg-amber-50 transition flex items-center gap-1" title="Snooze 4h — s">
-                @svg('heroicon-o-moon', 'w-3.5 h-3.5')<span>Snooze 4h</span><kbd class="text-[9px] opacity-60 ml-1">s</kbd>
+            <button wire:click="toggleSnoozePicker" class="px-2.5 py-1 rounded text-[11px] font-medium text-amber-700 hover:bg-amber-50 transition flex items-center gap-1" title="Snooze — s">
+                @svg('heroicon-o-moon', 'w-3.5 h-3.5')<span>Snooze</span><kbd class="text-[9px] opacity-60 ml-1">s</kbd>
             </button>
             <button disabled class="px-2.5 py-1 rounded text-[11px] text-[var(--ui-muted)] cursor-not-allowed flex items-center gap-1 opacity-50">
                 @svg('heroicon-o-link', 'w-3.5 h-3.5')<span>Link</span><kbd class="text-[9px] opacity-60 ml-1">l</kbd>

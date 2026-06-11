@@ -55,6 +55,12 @@ class Inbox extends Component
     public bool $replyOk = false;
     public bool $closeOnSend = true;
 
+    /* ----- snooze picker state ------------------------------------------- */
+    public bool $snoozePickerOpen = false;
+
+    /* ----- keyboard help overlay ----------------------------------------- */
+    public bool $helpOpen = false;
+
     public function mount(): void
     {
         // If the user landed on a sender deep-link, auto-expand its threads
@@ -224,9 +230,56 @@ class Inbox extends Component
             'status' => InboxItemStatus::Snoozed->value,
             'snoozed_until' => now()->addHours(max(1, $hours)),
         ]);
+        $this->snoozePickerOpen = false;
         $this->threadKey = null;
         $this->moveThread(1);
         unset($this->streamRows, $this->bucketCounts, $this->cockpitData);
+    }
+
+    /**
+     * Smart-time snooze targets — named preset → resolved Carbon instant.
+     * Centralised so the picker and the keymap agree on labels.
+     */
+    public function snoozePresets(): array
+    {
+        return [
+            ['key' => '1h',         'label' => 'In 1 Stunde',      'at' => now()->addHour()],
+            ['key' => '4h',         'label' => 'In 4 Stunden',     'at' => now()->addHours(4)],
+            ['key' => 'tonight',    'label' => 'Heute Abend (19:00)', 'at' => now()->setTime(19, 0)->isPast() ? now()->addDay()->setTime(19, 0) : now()->setTime(19, 0)],
+            ['key' => 'tomorrow',   'label' => 'Morgen früh (08:00)', 'at' => now()->addDay()->setTime(8, 0)],
+            ['key' => 'next_week',  'label' => 'Nächste Woche (Mo 08:00)', 'at' => now()->next('Monday')->setTime(8, 0)],
+            ['key' => 'next_month', 'label' => 'Nächsten Monat',   'at' => now()->addMonth()->startOfDay()->setTime(8, 0)],
+        ];
+    }
+
+    public function snoozeUntil(string $key): void
+    {
+        $item = $this->currentItem();
+        if (!$item) {
+            return;
+        }
+        $preset = collect($this->snoozePresets())->firstWhere('key', $key);
+        if (!$preset) {
+            return;
+        }
+        $item->update([
+            'status' => InboxItemStatus::Snoozed->value,
+            'snoozed_until' => $preset['at'],
+        ]);
+        $this->snoozePickerOpen = false;
+        $this->threadKey = null;
+        $this->moveThread(1);
+        unset($this->streamRows, $this->bucketCounts, $this->cockpitData);
+    }
+
+    public function toggleSnoozePicker(): void
+    {
+        $this->snoozePickerOpen = !$this->snoozePickerOpen;
+    }
+
+    public function toggleHelp(): void
+    {
+        $this->helpOpen = !$this->helpOpen;
     }
 
     /* --------------------------------------------------------------------
