@@ -7,11 +7,13 @@ use Platform\Inbox\Livewire\Rules\Show as RulesShow;
 use Platform\Inbox\Livewire\Show;
 use Platform\Inbox\Livewire\SnoozedIndex;
 use Platform\Inbox\Livewire\SubscriptionIndex;
+use Platform\Inbox\Livewire\V2\Inbox as InboxV2;
 use Platform\Inbox\Livewire\Costs\Index as CostsIndex;
 use Platform\Inbox\Livewire\Templates\Index as TemplatesIndex;
 use Platform\Inbox\Livewire\Templates\Show as TemplatesShow;
 
 Route::get('/', Index::class)->name('inbox.index');
+Route::get('/v2', InboxV2::class)->name('inbox.v2');
 Route::get('/snoozed', SnoozedIndex::class)->name('inbox.snoozed');
 Route::get('/subscriptions', SubscriptionIndex::class)->name('inbox.subscriptions');
 Route::get('/rules', RulesIndex::class)->name('inbox.rules.index');

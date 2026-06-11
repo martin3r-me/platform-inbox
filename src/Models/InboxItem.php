@@ -25,6 +25,7 @@ class InboxItem extends Model
         'user_id',
         'source_type',
         'source_id',
+        'thread_key',
         'channel',
         'sender_identifier',
         'sender_kind',
@@ -41,6 +42,9 @@ class InboxItem extends Model
         'snoozed_until',
         'handled_at',
         'received_at',
+        'importance_score',
+        'importance_scored_at',
+        'awaiting_reply_since',
     ];
 
     protected $casts = [
@@ -51,6 +55,9 @@ class InboxItem extends Model
         'received_at' => 'datetime',
         'audio_recorded_at' => 'datetime',
         'audio_duration_seconds' => 'integer',
+        'importance_score' => 'decimal:2',
+        'importance_scored_at' => 'datetime',
+        'awaiting_reply_since' => 'datetime',
     ];
 
     protected static function booted(): void

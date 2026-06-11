@@ -50,6 +50,8 @@ class InboxServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 IngestInboxCommand::class,
+                \Platform\Inbox\Console\Commands\BackfillInboxThreadKeys::class,
+                \Platform\Inbox\Console\Commands\RecomputeInboxScores::class,
             ]);
 
             // Schedule registration mirrors what datawarehouse does and what
@@ -63,6 +65,9 @@ class InboxServiceProvider extends ServiceProvider
                 $schedule = $this->app->make(Schedule::class);
                 $schedule->command('inbox:ingest --minutes=60')
                     ->everyFiveMinutes()
+                    ->withoutOverlapping();
+                $schedule->command('inbox:recompute-scores --since=24')
+                    ->hourly()
                     ->withoutOverlapping();
             });
         }
