@@ -90,9 +90,9 @@
             </button>
             <div class="flex-1"></div>
             <button
-                disabled
-                class="px-2.5 py-1 rounded text-[11px] font-medium text-[var(--ui-muted)] cursor-not-allowed flex items-center gap-1 opacity-50"
-                title="Reply — kommt in Layer (h)"
+                wire:click="openReply"
+                class="px-2.5 py-1 rounded text-[11px] font-medium text-[var(--ui-primary)] hover:bg-[var(--ui-primary)]/10 transition flex items-center gap-1"
+                title="Reply — Taste r"
             >
                 @svg('heroicon-o-arrow-uturn-left', 'w-3.5 h-3.5')
                 <span>Reply</span>
@@ -233,16 +233,7 @@
     </div>
 
     {{-- ==========================================================
-         REPLY BAR (stub bis Layer h)
+         REPLY COMPOSER
          ========================================================== --}}
-    <div class="shrink-0 border-t border-[var(--ui-border)]/40 bg-[var(--ui-muted-5)]/40 px-6 py-3">
-        <div class="flex items-center gap-2 text-[11px] text-[var(--ui-muted)]">
-            @svg('heroicon-o-arrow-uturn-left', 'w-3.5 h-3.5')
-            <span>Reply-Composer kommt in Layer (h). Bis dahin via</span>
-            <a href="{{ route('inbox.items.show', $item) }}" class="underline hover:text-[var(--ui-primary)]">
-                V1 Show
-            </a>
-            <span>.</span>
-        </div>
-    </div>
+    @include('inbox::livewire.v2.partials.reply-composer', ['channel' => 'mail'])
 </div>

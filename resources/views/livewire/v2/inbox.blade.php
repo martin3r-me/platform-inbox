@@ -168,8 +168,14 @@
                                     this.wire.call('snooze', 4);
                                 }
                                 break;
-                            // h/l/r/c land in layers (h) and (i) — channel-aware,
-                            // need pickers, stubbed for now.
+                            case 'r':
+                                if (this.wire.threadKey) {
+                                    e.preventDefault();
+                                    this.wire.call('openReply');
+                                }
+                                break;
+                            // h/l/c land in layer (i) — channel-aware, need pickers,
+                            // stubbed for now.
                             default: break;
                         }
                     },

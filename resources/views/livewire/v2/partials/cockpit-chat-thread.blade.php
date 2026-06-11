@@ -70,7 +70,7 @@
                 @svg('heroicon-o-link', 'w-3.5 h-3.5')<span>Link</span><kbd class="text-[9px] opacity-60 ml-1">l</kbd>
             </button>
             <div class="flex-1"></div>
-            <button disabled class="px-2.5 py-1 rounded text-[11px] text-[var(--ui-muted)] cursor-not-allowed flex items-center gap-1 opacity-50">
+            <button wire:click="openReply" class="px-2.5 py-1 rounded text-[11px] font-medium text-[var(--ui-primary)] hover:bg-[var(--ui-primary)]/10 transition flex items-center gap-1" title="Reply — Taste r">
                 @svg('heroicon-o-arrow-uturn-left', 'w-3.5 h-3.5')<span>Reply</span><kbd class="text-[9px] opacity-60 ml-1">r</kbd>
             </button>
         </div>
@@ -137,21 +137,6 @@
         @endif
     </div>
 
-    {{-- INLINE COMPOSE (stub bis Layer h) ----------------------- --}}
-    <div class="shrink-0 border-t border-[var(--ui-border)]/40 bg-white px-4 py-3">
-        <div class="max-w-2xl mx-auto flex items-center gap-2">
-            <input
-                type="text"
-                disabled
-                placeholder="Antwort tippen … (Composer kommt in Layer h)"
-                class="flex-1 px-3 py-2 rounded-full bg-[var(--ui-muted-5)] text-[12px] border-0 placeholder:text-[var(--ui-muted)] cursor-not-allowed"
-            />
-            <button
-                disabled
-                class="shrink-0 w-8 h-8 rounded-full bg-[var(--ui-muted-5)] text-[var(--ui-muted)] cursor-not-allowed flex items-center justify-center"
-            >
-                @svg('heroicon-o-paper-airplane', 'w-4 h-4')
-            </button>
-        </div>
-    </div>
+    {{-- INLINE COMPOSER ----------------------------------------- --}}
+    @include('inbox::livewire.v2.partials.reply-composer', ['channel' => 'message'])
 </div>

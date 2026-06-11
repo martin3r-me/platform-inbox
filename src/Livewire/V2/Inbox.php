@@ -8,6 +8,7 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 use Platform\Inbox\Enums\InboxItemStatus;
 use Platform\Inbox\Models\InboxItem;
+use Platform\Inbox\Services\InboxSendService;
 use Platform\Inbox\Services\V2\CockpitDataLoader;
 use Platform\Inbox\Services\V2\SmartBucketService;
 use Platform\Inbox\Services\V2\StreamProjector;
@@ -45,6 +46,14 @@ class Inbox extends Component
     /** filter chips (channel/sender/entity) — null when empty */
     #[Url(as: 'ch')]
     public ?string $filterChannel = null;
+
+    /* ----- reply composer state -------- not URL-bound, transient only ----- */
+    public bool $replyOpen = false;
+    public string $replySubject = '';
+    public string $replyBody = '';
+    public ?string $replyFeedback = null;
+    public bool $replyOk = false;
+    public bool $closeOnSend = true;
 
     public function mount(): void
     {
@@ -218,6 +227,76 @@ class Inbox extends Component
         $this->threadKey = null;
         $this->moveThread(1);
         unset($this->streamRows, $this->bucketCounts, $this->cockpitData);
+    }
+
+    /* --------------------------------------------------------------------
+       Reply composer — uses the existing InboxSendService so mail goes out
+       through Outlook /reply (preserves thread) and chats land in Teams.
+       -------------------------------------------------------------------- */
+
+    public function openReply(): void
+    {
+        $item = $this->currentItem();
+        if (!$item) {
+            return;
+        }
+        // Mail uses /reply on the Outlook side — subject stays implicit. We
+        // still prefill it for the textarea so the user sees the context.
+        $subject = $item->subject ?: '';
+        if (!str_starts_with(strtolower($subject), 're:') && $subject !== '') {
+            $subject = 'Re: ' . $subject;
+        }
+        $this->replySubject = $subject;
+        $this->replyBody = '';
+        $this->replyFeedback = null;
+        $this->replyOk = false;
+        $this->replyOpen = true;
+    }
+
+    public function closeReply(): void
+    {
+        $this->replyOpen = false;
+        $this->replyBody = '';
+        $this->replySubject = '';
+        $this->replyFeedback = null;
+    }
+
+    public function sendReply(): void
+    {
+        $item = $this->currentItem();
+        if (!$item) {
+            return;
+        }
+        $body = trim($this->replyBody);
+        if ($body === '') {
+            $this->replyFeedback = 'Bitte einen Text eingeben.';
+            $this->replyOk = false;
+            return;
+        }
+
+        $result = app(InboxSendService::class)->sendReply(
+            $item,
+            $this->replySubject,
+            $body,
+            auth()->user(),
+        );
+
+        $this->replyOk = (bool) ($result['ok'] ?? false);
+        $this->replyFeedback = $result['message'] ?? null;
+
+        if ($this->replyOk && $this->closeOnSend) {
+            $item->update([
+                'status' => InboxItemStatus::Done->value,
+                'handled_at' => now(),
+                'awaiting_reply_since' => now(),
+            ]);
+            $this->replyOpen = false;
+            $this->replyBody = '';
+            $this->replySubject = '';
+            $this->threadKey = null;
+            $this->moveThread(1);
+            unset($this->streamRows, $this->bucketCounts, $this->cockpitData);
+        }
     }
 
     /* --------------------------------------------------------------------
