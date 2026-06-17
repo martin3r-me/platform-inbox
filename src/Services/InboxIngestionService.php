@@ -73,9 +73,18 @@ class InboxIngestionService
         $receivedField = $cfg['received_at_field'];
         $skipOutbound = (bool) ($cfg['skip_outbound'] ?? false);
 
+        // Window covers BOTH the provider-side timestamp and our DB-insert time.
+        // Webhooks routinely arrive minutes-to-hours after the actual event
+        // (Graph delivery delay, queue backlog) — filtering on received_at
+        // alone silently drops sessions whose webhook landed after the window
+        // had already passed them by. created_at catches the late arrivals;
+        // whereNotExists below still prevents duplicates.
         $rows = DB::table($sessionTable . ' as s')
             ->join('user_connector_connections as c', 'c.id', '=', 's.connection_id')
-            ->where("s.{$receivedField}", '>=', $since)
+            ->where(function ($q) use ($receivedField, $since) {
+                $q->where("s.{$receivedField}", '>=', $since)
+                    ->orWhere('s.created_at', '>=', $since);
+            })
             ->when($skipOutbound, function ($q) {
                 // Skip the user's own sends — they have no triage value and
                 // just create echo items in the inbox.
