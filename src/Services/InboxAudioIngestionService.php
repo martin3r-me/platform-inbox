@@ -173,8 +173,12 @@ class InboxAudioIngestionService
                         'user_id' => $item->user_id,
                     ],
                 );
-                if (isset($result['context_file_id'])) {
-                    $item->addFileReference($result['context_file_id'], ['kind' => 'audio_original']);
+                // ContextFileService returns the file's primary key under 'id'
+                // — earlier code looked for 'context_file_id' which doesn't
+                // exist on the return array, so the audio reference silently
+                // never got attached.
+                if (isset($result['id'])) {
+                    $item->addFileReference((int) $result['id'], ['kind' => 'audio_original']);
                 }
                 return;
             }

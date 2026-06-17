@@ -95,9 +95,12 @@ class DownloadPlaudAudioJob implements ShouldQueue
                 ],
             );
 
-            if (!empty($result['context_file_id'])) {
+            // ContextFileService returns the file's primary key under 'id';
+            // 'context_file_id' was a copy-paste from a non-existent return
+            // shape and silently never attached the audio reference.
+            if (!empty($result['id'])) {
                 $item->addFileReference(
-                    (int) $result['context_file_id'],
+                    (int) $result['id'],
                     ['kind' => 'audio_original', 'persisted_by' => 'plaud:DownloadPlaudAudioJob'],
                 );
             }
