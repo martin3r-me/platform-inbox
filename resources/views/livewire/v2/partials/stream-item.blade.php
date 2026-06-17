@@ -40,12 +40,21 @@
             ? 'border-[var(--ui-primary)]/40 bg-white ring-1 ring-[var(--ui-primary)]/20 shadow-sm'
             : 'border-transparent bg-white hover:border-[var(--ui-border)]/60 hover:bg-white' }}"
 >
-    {{-- Channel chip ----------------------------------------------- --}}
+    {{-- Channel chip + Enrichment-Indikator (✨ done, Spinner running) ---
+         Status-Slots dürfen sich nicht summieren: done > running > pending,
+         und failed bleibt unmarkiert (nicht-blockierend; Cockpit zeigt es). --}}
     <span
-        class="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md {{ $channelChip['bg'] }} {{ $channelChip['fg'] }}"
-        title="{{ $channelChip['label'] }}"
+        class="relative shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md {{ $channelChip['bg'] }} {{ $channelChip['fg'] }}"
+        title="{{ $channelChip['label'] }}{{ ($item['enriched'] ?? false) ? ' · KI-Zusammenfassung verfügbar' : (($item['enrichment_status'] ?? null) === 'running' ? ' · wird angereichert…' : '') }}"
     >
         @svg('heroicon-o-' . $channelChip['icon'], 'w-4 h-4')
+        @if($item['enriched'] ?? false)
+            <span class="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-white flex items-center justify-center text-[8px] leading-none">✨</span>
+        @elseif(in_array($item['enrichment_status'] ?? null, ['running', 'pending'], true))
+            <span class="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-white flex items-center justify-center" title="wird angereichert…">
+                <span class="w-1.5 h-1.5 rounded-full bg-[var(--ui-primary)] animate-pulse"></span>
+            </span>
+        @endif
     </span>
 
     <div class="min-w-0 flex-1">
@@ -82,10 +91,18 @@
             {{ $item['subject'] ?: '(ohne Betreff)' }}
         </div>
 
-        {{-- Row 3: preview (only if present) ---------------------------- --}}
-        @if($item['preview'])
-            <p class="text-[10.5px] text-[var(--ui-secondary)] leading-snug line-clamp-1 m-0 mt-0.5">
-                {{ \Illuminate\Support\Str::limit(strip_tags($item['preview']), 90) }}
+        {{-- Row 3: preview ----------------------------------------------
+             Enriched TLDR überschreibt das raw body_preview — komprimiert
+             die Aussage stark und ist für den Stream-Scan wertvoller. Fällt
+             auf den Source-Preview zurück wenn (noch) keine Anreicherung
+             vorliegt. --}}
+        @php
+            $rowPreview = ($item['enriched_preview'] ?? null) ?: $item['preview'];
+        @endphp
+        @if($rowPreview)
+            <p class="text-[10.5px] leading-snug line-clamp-1 m-0 mt-0.5
+                {{ ($item['enriched'] ?? false) ? 'text-[var(--ui-primary)] italic' : 'text-[var(--ui-secondary)]' }}">
+                {{ \Illuminate\Support\Str::limit(strip_tags($rowPreview), 110) }}
             </p>
         @endif
     </div>

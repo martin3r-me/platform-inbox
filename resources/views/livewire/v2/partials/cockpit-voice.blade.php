@@ -2,6 +2,8 @@
     /** @var array $data */
     $item = $data['item'];
     $enrichment = $data['enrichment'] ?? null;
+    $enrichmentStatus = $data['enrichment_status'] ?? null;
+    $enrichmentError = $data['enrichment_error'] ?? null;
     $linked = $data['linked_entities'] ?? [];
     $status = $item->status?->value;
 @endphp
@@ -82,6 +84,11 @@
                         <p class="text-[12px] text-[var(--ui-secondary)] m-0 leading-relaxed">{{ $enrichment['tldr'] }}</p>
                     @endif
                 </div>
+            @else
+                @include('inbox::livewire.v2.partials.enrichment-skeleton', [
+                    'enrichmentStatus' => $enrichmentStatus,
+                    'enrichmentError' => $enrichmentError,
+                ])
             @endif
 
             {{-- Action items (CHIPS) --}}

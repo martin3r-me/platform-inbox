@@ -2,6 +2,8 @@
     /** @var array $data */
     $item = $data['item'];
     $enrichment = $data['enrichment'] ?? null;
+    $enrichmentStatus = $data['enrichment_status'] ?? null;
+    $enrichmentError = $data['enrichment_error'] ?? null;
     $participants = $data['participants'] ?? [];
     $linked = $data['linked_entities'] ?? [];
     $thread = $data['thread_history']['messages'] ?? [];
@@ -124,6 +126,11 @@
                         </p>
                     @endif
                 </div>
+            @else
+                @include('inbox::livewire.v2.partials.enrichment-skeleton', [
+                    'enrichmentStatus' => $enrichmentStatus,
+                    'enrichmentError' => $enrichmentError,
+                ])
             @endif
 
             {{-- Action items ---------------------------------------- --}}

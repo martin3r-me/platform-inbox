@@ -5,7 +5,9 @@ namespace Platform\Inbox\Services\V2;
 use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Platform\Inbox\Models\InboxItem;
+use Platform\Inbox\Models\InboxItemEnrichment;
 use Platform\Inbox\Models\InboxSenderPulse;
 
 /**
@@ -148,7 +150,14 @@ class StreamProjector
             'meeting' => $items->filter(fn ($i) => ($i->channel?->value ?? $i->channel) === 'meeting')->count(),
         ];
 
-        $groups = $this->groupByDateBucket($items);
+        // Batched enrichment lookup — one round-trip for the whole page instead
+        // of N. We need two slices: the primary done enrichment (to lift its
+        // tldr/headline into the stream preview) and any pending/running rows
+        // so the stream can show a "wird angereichert"-Indikator instead of a
+        // plain item that looks un-enriched while a job is still in flight.
+        $enrichmentMap = $this->loadEnrichmentLookup($items->pluck('id')->all());
+
+        $groups = $this->groupByDateBucket($items, $enrichmentMap);
 
         return [
             'groups' => $groups,
@@ -158,12 +167,73 @@ class StreamProjector
     }
 
     /**
+     * Bulk-load enrichment data for a slice of item ids. Returns a map keyed
+     * by item id with two slots:
+     *   - 'primary' → ['tldr', 'headline'] from the done is_primary row
+     *   - 'status'  → 'done' | 'running' | 'pending' | 'failed' | null
+     *
+     * Status reflects the *most recent* enrichment row: if a primary done
+     * exists we mark it 'done' even when an older failure is in the table;
+     * if nothing is done yet we surface running/pending so the UI can render
+     * a "wird angereichert" hint.
+     *
+     * @param  array<int, int>  $itemIds
+     * @return array<int, array{primary: ?array, status: ?string}>
+     */
+    protected function loadEnrichmentLookup(array $itemIds): array
+    {
+        if (empty($itemIds)) {
+            return [];
+        }
+
+        $rows = DB::table('inbox_item_enrichments')
+            ->whereIn('inbox_item_id', $itemIds)
+            ->select('inbox_item_id', 'status', 'is_primary', 'output', 'run_at')
+            ->orderBy('inbox_item_id')
+            ->orderByDesc('run_at')
+            ->get();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $id = (int) $row->inbox_item_id;
+            if (!isset($map[$id])) {
+                $map[$id] = ['primary' => null, 'status' => null];
+            }
+            if ((int) $row->is_primary === 1 && $row->status === InboxItemEnrichment::STATUS_DONE && $map[$id]['primary'] === null) {
+                $output = $row->output ? json_decode($row->output, true) : [];
+                $map[$id]['primary'] = [
+                    'tldr' => $output['tldr'] ?? null,
+                    'headline' => $output['headline'] ?? null,
+                ];
+            }
+            // First (most recent) row's status wins unless we already locked
+            // in 'done' through a primary above.
+            if ($map[$id]['status'] === null) {
+                $map[$id]['status'] = $row->status;
+            }
+        }
+
+        // If a primary done row exists, the status is 'done' even if a newer
+        // re-run is pending — that way the user sees the existing summary in
+        // the stream while the background job refreshes it.
+        foreach ($map as $id => &$slot) {
+            if ($slot['primary'] !== null) {
+                $slot['status'] = InboxItemEnrichment::STATUS_DONE;
+            }
+        }
+        unset($slot);
+
+        return $map;
+    }
+
+    /**
      * Build the chronological day-bucket groups.
      *
      * @param  Collection<int, InboxItem>  $items
+     * @param  array<int, array{primary: ?array, status: ?string}>  $enrichmentMap
      * @return array<int, array{key: string, label: string, items: array<int, array<string, mixed>>}>
      */
-    protected function groupByDateBucket(Collection $items): array
+    protected function groupByDateBucket(Collection $items, array $enrichmentMap = []): array
     {
         $now = CarbonImmutable::now();
         $today = $now->startOfDay();
@@ -183,8 +253,9 @@ class StreamProjector
 
         foreach ($items as $item) {
             $rec = $item->received_at;
+            $enrichment = $enrichmentMap[$item->id] ?? ['primary' => null, 'status' => null];
             if (!$rec) {
-                $buckets['older'][] = $this->shapeItem($item);
+                $buckets['older'][] = $this->shapeItem($item, $enrichment);
                 continue;
             }
             $key = match (true) {
@@ -195,7 +266,7 @@ class StreamProjector
                 $rec->gte($monthStart)     => 'month',
                 default                    => 'older',
             };
-            $buckets[$key][] = $this->shapeItem($item);
+            $buckets[$key][] = $this->shapeItem($item, $enrichment);
         }
 
         // Upcoming reads naturally ASC (next event first); the rest stays DESC
@@ -222,14 +293,24 @@ class StreamProjector
      * Includes the keys needed by V2/Inbox::selectItem() to round-trip into the
      * existing sender|thread-based cockpit selection without further lookups.
      *
+     * The optional $enrichment slot lifts the primary tldr/headline into the
+     * row so the stream can render the LLM summary as the preview override
+     * instead of the often-noisy raw body_preview, and marks the row as
+     * enriched/in-flight so the view can draw the ✨ chip + skeleton state.
+     *
+     * @param  array{primary: ?array, status: ?string}  $enrichment
      * @return array<string, mixed>
      */
-    protected function shapeItem(InboxItem $item): array
+    protected function shapeItem(InboxItem $item, array $enrichment = ['primary' => null, 'status' => null]): array
     {
         $channel = $item->channel?->value ?? (string) $item->channel;
         $kind = $item->sender_kind ?? 'unknown';
         $id = $item->sender_identifier ?? '';
         $threadKey = $item->thread_key ?: ('item-' . $item->id);
+
+        $primary = $enrichment['primary'] ?? null;
+        $status = $enrichment['status'] ?? null;
+        $enrichedPreview = $primary['tldr'] ?? $primary['headline'] ?? null;
 
         return [
             'id' => $item->id,
@@ -245,6 +326,9 @@ class StreamProjector
             'sender_key' => $kind . '|' . $id,
             'thread_key' => $threadKey,
             'importance_score' => (float) ($item->importance_score ?? 0),
+            'enriched' => $primary !== null,
+            'enriched_preview' => $enrichedPreview,
+            'enrichment_status' => $status, // 'done' | 'running' | 'pending' | 'failed' | null
         ];
     }
 

@@ -24,6 +24,8 @@ class CockpitDataLoader
      * @return array{
      *     item: InboxItem,
      *     enrichment: array|null,
+     *     enrichment_status: string|null,
+     *     enrichment_error: string|null,
      *     participants: array,
      *     linked_entities: array,
      *     thread_history: array{kind: string, messages: array}|null,
@@ -49,6 +51,23 @@ class CockpitDataLoader
             'summary' => $primary->output['summary'] ?? null,
         ] : null;
 
+        // Status surface for the cockpit's loading state. Even when there's
+        // no done primary, the user benefits from "wird angereichert…"
+        // rather than a silently empty summary section while the queue
+        // works through the RunEnrichmentJob. We pick the most recent row
+        // and translate its status; failures are sticky so the user can
+        // see why nothing appeared.
+        $latest = InboxItemEnrichment::query()
+            ->where('inbox_item_id', $item->id)
+            ->latest('run_at')
+            ->first();
+        $enrichmentStatus = $primary
+            ? InboxItemEnrichment::STATUS_DONE
+            : ($latest?->status);
+        $enrichmentError = $primary
+            ? null
+            : ($latest?->status === InboxItemEnrichment::STATUS_FAILED ? $latest?->error_message : null);
+
         $participants = $item->participants()
             ->orderBy('role')
             ->limit(50)
@@ -67,6 +86,8 @@ class CockpitDataLoader
         return [
             'item' => $item,
             'enrichment' => $enrichment,
+            'enrichment_status' => $enrichmentStatus,    // done|running|pending|failed|null
+            'enrichment_error' => $enrichmentError,
             'participants' => $participants,
             'linked_entities' => $linkedEntities,
             'thread_history' => $threadHistory,
