@@ -23,14 +23,13 @@
             @php
                 $cols = [
                     'Navigation' => [
-                        ['j',         'Nächster Absender'],
-                        ['k',         'Vorheriger Absender'],
-                        ['J',         'Nächster Thread (innerhalb Sender)'],
-                        ['K',         'Vorheriger Thread'],
-                        ['Enter',     'Drill in (Sender → Thread)'],
-                        ['Esc',       'Drill out / Composer schließen'],
-                        ['e',         'Sender expand/collapse'],
-                        ['Shift+S',   'Sort: Smart ↔ Chronologisch'],
+                        ['j',         'Nächstes Item'],
+                        ['k',         'Vorheriges Item'],
+                        ['J',         'Nächster Absender (Sprung)'],
+                        ['K',         'Vorheriger Absender (Sprung)'],
+                        ['Enter',     'Nächstes Item'],
+                        ['Esc',       'Auswahl löschen / Composer schließen'],
+                        ['Shift+S',   'Sort: Chronologisch ↔ Smart'],
                     ],
                     'Verben' => [
                         ['d', 'Done — als erledigt markieren'],

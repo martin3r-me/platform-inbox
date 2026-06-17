@@ -2,6 +2,8 @@
 
 namespace Platform\Inbox\Services\V2;
 
+use Carbon\Carbon;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxSenderPulse;
@@ -94,6 +96,156 @@ class StreamProjector
         }
 
         return $this->sortRows($rows, $sort);
+    }
+
+    /**
+     * Flat item projection — one row per InboxItem (no sender folding), grouped
+     * by a date bucket so the view can render headers like
+     * "Demnächst / Heute / Gestern / Diese Woche / Älter". Used by the V2
+     * stream when the user wants a chronological item list rather than the
+     * sender→thread fold.
+     *
+     * Items where received_at lies in the future (typical for meetings, whose
+     * received_at = meeting start_at) are placed in their own "Demnächst"
+     * bucket and sorted ASC inside it so the next event comes first.
+     * Everything else sorts DESC (newest first).
+     *
+     * @param  array<string, mixed>  $filters  optional: ['channel' => 'mail', 'awaiting' => true, 'today' => true]
+     * @return array{
+     *     groups: array<int, array{key: string, label: string, items: array<int, array<string, mixed>>}>,
+     *     total: int,
+     *     counts: array<string, int>
+     * }
+     */
+    public function projectItems(int $userId, string $bucket, array $filters = []): array
+    {
+        $query = InboxItem::query()->where('user_id', $userId);
+        $query = $this->buckets->apply($query, $bucket, $userId);
+
+        if (!empty($filters['channel'])) {
+            $query->where('channel', $filters['channel']);
+        }
+        if (!empty($filters['awaiting'])) {
+            $query->whereNotNull('awaiting_reply_since');
+        }
+        if (!empty($filters['today'])) {
+            $query->where('received_at', '>=', now()->startOfDay());
+        }
+
+        $items = $query
+            ->orderByDesc('received_at')
+            ->limit(2000)
+            ->get();
+
+        // Stream-wide counters drive the quick-filter chips (Heute / Awaiting /
+        // Meetings) — computed in PHP so the user sees them update instantly
+        // when filters/bucket change without a second query roundtrip.
+        $today = now()->startOfDay();
+        $counts = [
+            'total' => $items->count(),
+            'today' => $items->filter(fn ($i) => $i->received_at && $i->received_at->gte($today))->count(),
+            'awaiting' => $items->filter(fn ($i) => $i->awaiting_reply_since !== null)->count(),
+            'meeting' => $items->filter(fn ($i) => ($i->channel?->value ?? $i->channel) === 'meeting')->count(),
+        ];
+
+        $groups = $this->groupByDateBucket($items);
+
+        return [
+            'groups' => $groups,
+            'total' => $items->count(),
+            'counts' => $counts,
+        ];
+    }
+
+    /**
+     * Build the chronological day-bucket groups.
+     *
+     * @param  Collection<int, InboxItem>  $items
+     * @return array<int, array{key: string, label: string, items: array<int, array<string, mixed>>}>
+     */
+    protected function groupByDateBucket(Collection $items): array
+    {
+        $now = CarbonImmutable::now();
+        $today = $now->startOfDay();
+        $yesterday = $today->subDay();
+        $weekStart = $today->subDays(7);
+        $monthStart = $today->subDays(30);
+
+        $defs = [
+            ['key' => 'upcoming', 'label' => 'Demnächst'],
+            ['key' => 'today', 'label' => 'Heute'],
+            ['key' => 'yesterday', 'label' => 'Gestern'],
+            ['key' => 'week', 'label' => 'Letzte 7 Tage'],
+            ['key' => 'month', 'label' => 'Letzte 30 Tage'],
+            ['key' => 'older', 'label' => 'Älter'],
+        ];
+        $buckets = array_fill_keys(array_column($defs, 'key'), []);
+
+        foreach ($items as $item) {
+            $rec = $item->received_at;
+            if (!$rec) {
+                $buckets['older'][] = $this->shapeItem($item);
+                continue;
+            }
+            $key = match (true) {
+                $rec->gt($now)             => 'upcoming',
+                $rec->gte($today)          => 'today',
+                $rec->gte($yesterday)      => 'yesterday',
+                $rec->gte($weekStart)      => 'week',
+                $rec->gte($monthStart)     => 'month',
+                default                    => 'older',
+            };
+            $buckets[$key][] = $this->shapeItem($item);
+        }
+
+        // Upcoming reads naturally ASC (next event first); the rest stays DESC
+        // (newest first) as the query already returned them.
+        usort($buckets['upcoming'], fn ($a, $b) => strcmp($a['received_at'] ?? '', $b['received_at'] ?? ''));
+
+        $out = [];
+        foreach ($defs as $def) {
+            $rows = $buckets[$def['key']];
+            if (empty($rows)) {
+                continue;
+            }
+            $out[] = [
+                'key' => $def['key'],
+                'label' => $def['label'],
+                'items' => $rows,
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Shape an InboxItem into the array the view + selection layer use.
+     * Includes the keys needed by V2/Inbox::selectItem() to round-trip into the
+     * existing sender|thread-based cockpit selection without further lookups.
+     *
+     * @return array<string, mixed>
+     */
+    protected function shapeItem(InboxItem $item): array
+    {
+        $channel = $item->channel?->value ?? (string) $item->channel;
+        $kind = $item->sender_kind ?? 'unknown';
+        $id = $item->sender_identifier ?? '';
+        $threadKey = $item->thread_key ?: ('item-' . $item->id);
+
+        return [
+            'id' => $item->id,
+            'channel' => $channel,
+            'subject' => $item->subject,
+            'preview' => $item->preview,
+            'received_at' => $item->received_at?->toIso8601String(),
+            'direction' => $item->direction,
+            'awaiting' => $item->awaiting_reply_since !== null,
+            'sender_label' => $item->sender_label ?? $id,
+            'sender_identifier' => $id,
+            'sender_kind' => $kind,
+            'sender_key' => $kind . '|' . $id,
+            'thread_key' => $threadKey,
+            'importance_score' => (float) ($item->importance_score ?? 0),
+        ];
     }
 
     /**

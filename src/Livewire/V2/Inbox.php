@@ -39,13 +39,21 @@ class Inbox extends Component
 
     public ?string $expandedSenderKey = null;
 
-    /** smart | chronological — toggled via Shift+S */
+    /** smart | chronological — toggled via Shift+S; chronological is the
+     *  default since the smart bucketing has been moved up into the quick-
+     *  filter bar (Awaiting/Heute as explicit chips) and the new flat stream
+     *  groups items by date — both make the implicit smart ordering harder
+     *  to predict than a plain timeline. */
     #[Url(as: 'sort')]
-    public string $sortMode = 'smart';
+    public string $sortMode = 'chronological';
 
     /** filter chips (channel/sender/entity) — null when empty */
     #[Url(as: 'ch')]
     public ?string $filterChannel = null;
+
+    /** quick filter — null | 'today' | 'awaiting' | 'meeting' */
+    #[Url(as: 'q')]
+    public ?string $quickFilter = null;
 
     /* ----- reply composer state -------- not URL-bound, transient only ----- */
     public bool $replyOpen = false;
@@ -94,10 +102,44 @@ class Inbox extends Component
             return [];
         }
         $filters = array_filter([
-            'channel' => $this->filterChannel,
+            'channel' => $this->effectiveChannelFilter(),
         ]);
         return app(StreamProjector::class)
             ->project($userId, $this->bucket, $filters, $this->sortMode);
+    }
+
+    /**
+     * Flat, date-bucketed item projection — primary V2 stream rendering.
+     * Returns { groups, total, counts } so the quick-filter bar can show
+     * live counters without a second query.
+     */
+    #[Computed]
+    public function streamItems(): array
+    {
+        $userId = auth()->id();
+        if (!$userId) {
+            return ['groups' => [], 'total' => 0, 'counts' => []];
+        }
+        $filters = array_filter([
+            'channel' => $this->effectiveChannelFilter(),
+            'awaiting' => $this->quickFilter === 'awaiting' ?: null,
+            'today' => $this->quickFilter === 'today' ?: null,
+        ]);
+        return app(StreamProjector::class)
+            ->projectItems($userId, $this->bucket, $filters);
+    }
+
+    /**
+     * 'meeting' is a quick-filter chip that maps onto the channel filter —
+     * keeps the chip co-located with Today/Awaiting visually even though
+     * under the hood it just narrows by channel.
+     */
+    protected function effectiveChannelFilter(): ?string
+    {
+        if ($this->quickFilter === 'meeting') {
+            return 'meeting';
+        }
+        return $this->filterChannel;
     }
 
     #[Computed]
@@ -177,6 +219,61 @@ class Inbox extends Component
         $this->expandedSenderKey = $senderKey;
     }
 
+    /**
+     * Selection for the flat item stream — collapses senderKey + threadKey
+     * derivation server-side so the view only deals with item ids.
+     */
+    public function selectItem(int $itemId): void
+    {
+        $row = $this->findItemRow($itemId);
+        if (!$row) {
+            return;
+        }
+        $this->selectThread($row['sender_key'], $row['thread_key']);
+    }
+
+    public function setQuickFilter(?string $key): void
+    {
+        $this->quickFilter = $this->quickFilter === $key ? null : $key;
+        $this->senderKey = null;
+        $this->threadKey = null;
+    }
+
+    /**
+     * Look up an item across the projected groups — used by selectItem and
+     * by keyboard navigation to walk the flat stream order.
+     *
+     * @return array<string,mixed>|null
+     */
+    protected function findItemRow(int $itemId): ?array
+    {
+        foreach (($this->streamItems['groups'] ?? []) as $group) {
+            foreach ($group['items'] as $row) {
+                if ((int) $row['id'] === $itemId) {
+                    return $row;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Flatten the date-bucketed stream into a single ordered id list so
+     * j/k step linearly through the visible items.
+     *
+     * @return array<int, int>
+     */
+    protected function flatItemIds(): array
+    {
+        $ids = [];
+        foreach (($this->streamItems['groups'] ?? []) as $group) {
+            foreach ($group['items'] as $row) {
+                $ids[] = (int) $row['id'];
+            }
+        }
+        return $ids;
+    }
+
     public function toggleExpand(string $senderKey): void
     {
         $this->expandedSenderKey = $this->expandedSenderKey === $senderKey ? null : $senderKey;
@@ -217,7 +314,7 @@ class Inbox extends Component
         // Move to the next thread so flow is preserved.
         $this->threadKey = null;
         $this->moveThread(1);
-        unset($this->streamRows, $this->bucketCounts, $this->cockpitData);
+        unset($this->streamRows, $this->streamItems, $this->bucketCounts, $this->cockpitData);
     }
 
     public function snooze(int $hours = 4): void
@@ -233,7 +330,7 @@ class Inbox extends Component
         $this->snoozePickerOpen = false;
         $this->threadKey = null;
         $this->moveThread(1);
-        unset($this->streamRows, $this->bucketCounts, $this->cockpitData);
+        unset($this->streamRows, $this->streamItems, $this->bucketCounts, $this->cockpitData);
     }
 
     /**
@@ -269,7 +366,7 @@ class Inbox extends Component
         $this->snoozePickerOpen = false;
         $this->threadKey = null;
         $this->moveThread(1);
-        unset($this->streamRows, $this->bucketCounts, $this->cockpitData);
+        unset($this->streamRows, $this->streamItems, $this->bucketCounts, $this->cockpitData);
     }
 
     public function toggleSnoozePicker(): void
@@ -348,7 +445,7 @@ class Inbox extends Component
             $this->replySubject = '';
             $this->threadKey = null;
             $this->moveThread(1);
-            unset($this->streamRows, $this->bucketCounts, $this->cockpitData);
+            unset($this->streamRows, $this->streamItems, $this->bucketCounts, $this->cockpitData);
         }
     }
 
@@ -356,13 +453,55 @@ class Inbox extends Component
        Keyboard moves — Alpine calls these via $wire.method()
        -------------------------------------------------------------------- */
 
-    public function moveSender(int $direction): void
+    /**
+     * j/k navigation — walks the flat date-bucketed item stream linearly so
+     * jumping never crosses an invisible sender boundary. Identifies the
+     * current position by the active item's id (resolved from threadKey).
+     */
+    public function moveItem(int $direction): void
     {
-        $rows = $this->streamRows;
-        if (empty($rows)) {
+        $ids = $this->flatItemIds();
+        if (empty($ids)) {
             return;
         }
-        $keys = array_map(fn ($r) => $r['sender_kind'] . '|' . $r['sender_identifier'], $rows);
+
+        $currentId = $this->currentItem()?->id;
+        if ($currentId === null) {
+            $this->selectItem($ids[0]);
+            return;
+        }
+
+        $idx = array_search($currentId, $ids, true);
+        if ($idx === false) {
+            $this->selectItem($ids[0]);
+            return;
+        }
+
+        $next = max(0, min(count($ids) - 1, $idx + $direction));
+        $this->selectItem($ids[$next]);
+    }
+
+    /**
+     * Sender-level nav stays available for keyboard users (Shift+J/K) that
+     * still think in senders — walks unique sender_keys in stream order.
+     */
+    public function moveSender(int $direction): void
+    {
+        $seen = [];
+        $keys = [];
+        foreach (($this->streamItems['groups'] ?? []) as $group) {
+            foreach ($group['items'] as $row) {
+                $k = $row['sender_key'];
+                if (isset($seen[$k])) {
+                    continue;
+                }
+                $seen[$k] = true;
+                $keys[] = $k;
+            }
+        }
+        if (empty($keys)) {
+            return;
+        }
         if ($this->senderKey === null) {
             $this->selectSender($keys[0]);
             return;
@@ -376,30 +515,14 @@ class Inbox extends Component
         $this->selectSender($keys[$next]);
     }
 
+    /**
+     * Compatibility alias — moveItem is the new j/k handler. Older keymap
+     * code that still calls moveThread keeps working by stepping through
+     * items, which is the same effect now that the stream is flat.
+     */
     public function moveThread(int $direction): void
     {
-        $rows = $this->streamRows;
-        $row = collect($rows)->first(
-            fn ($r) => $this->senderKey === $r['sender_kind'] . '|' . $r['sender_identifier'],
-        );
-        if (!$row || empty($row['threads'])) {
-            return;
-        }
-        $keys = array_map(
-            fn ($t) => $t['thread_key'] ?: ('item-' . $t['latest_item_id']),
-            $row['threads'],
-        );
-        if ($this->threadKey === null) {
-            $this->selectThread($this->senderKey, $keys[0]);
-            return;
-        }
-        $idx = array_search($this->threadKey, $keys, true);
-        if ($idx === false) {
-            $this->selectThread($this->senderKey, $keys[0]);
-            return;
-        }
-        $next = max(0, min(count($keys) - 1, $idx + $direction));
-        $this->selectThread($this->senderKey, $keys[$next]);
+        $this->moveItem($direction);
     }
 
     public function render(): View

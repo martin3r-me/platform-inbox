@@ -2,6 +2,9 @@
     $buckets = $this->bucketDefs;
     $counts = $this->bucketCounts;
     $stream = $this->streamRows;
+    $streamFlat = $this->streamItems;
+    $itemCounts = $streamFlat['counts'] ?? [];
+    $itemGroups = $streamFlat['groups'] ?? [];
     $cockpitMode = $this->cockpitMode;
 @endphp
 
@@ -107,18 +110,64 @@
     <div class="flex h-[calc(100vh-3.5rem)] bg-[var(--ui-muted-5)]/30">
 
         {{-- STREAM ------------------------------------------------- --}}
-        <div class="w-[440px] shrink-0 border-r border-[var(--ui-border)]/40 overflow-y-auto" id="inbox-v2-stream">
-            @if(empty($stream))
-                <div class="p-8 text-center text-[12px] text-[var(--ui-muted)]">
-                    Keine Items in diesem Bucket.
-                </div>
-            @else
-                <div class="p-3 space-y-2">
-                    @foreach($stream as $row)
-                        @include('inbox::livewire.v2.partials.sender-card', ['row' => $row])
+        <div class="w-[440px] shrink-0 border-r border-[var(--ui-border)]/40 overflow-y-auto flex flex-col" id="inbox-v2-stream">
+
+            {{-- Quick-Filter-Bar: Alle / Heute / Awaiting / Meetings ----
+                 Live-Counters aus streamItems['counts'] — bleibt sticky beim
+                 Scrollen, damit der Filter immer erreichbar ist. --}}
+            <div class="sticky top-0 z-10 bg-[var(--ui-muted-5)]/95 backdrop-blur border-b border-[var(--ui-border)]/40 px-3 py-2 flex items-center gap-1 text-[11px]">
+                @php
+                    $chips = [
+                        ['key' => null,        'label' => 'Alle',     'count' => $itemCounts['total']    ?? 0],
+                        ['key' => 'today',     'label' => 'Heute',    'count' => $itemCounts['today']    ?? 0],
+                        ['key' => 'awaiting',  'label' => 'Awaiting', 'count' => $itemCounts['awaiting'] ?? 0],
+                        ['key' => 'meeting',   'label' => 'Meetings', 'count' => $itemCounts['meeting']  ?? 0],
+                    ];
+                @endphp
+                @foreach($chips as $chip)
+                    @php $active = ($quickFilter ?? null) === $chip['key']; @endphp
+                    <button
+                        type="button"
+                        wire:click="setQuickFilter(@js($chip['key']))"
+                        class="px-2 py-1 rounded-md transition flex items-center gap-1
+                            {{ $active
+                                ? 'bg-[var(--ui-primary)] text-white font-medium'
+                                : 'text-[var(--ui-secondary)] hover:bg-[var(--ui-muted-5)]' }}"
+                    >
+                        <span>{{ $chip['label'] }}</span>
+                        @if($chip['count'] > 0)
+                            <span class="text-[10px] tabular-nums {{ $active ? 'opacity-90' : 'opacity-60' }}">
+                                {{ $chip['count'] }}
+                            </span>
+                        @endif
+                    </button>
+                @endforeach
+            </div>
+
+            {{-- Stream-Body: flache Item-Liste, gruppiert nach Datum ---- --}}
+            <div class="flex-1 overflow-y-auto">
+                @if(empty($itemGroups))
+                    <div class="p-8 text-center text-[12px] text-[var(--ui-muted)]">
+                        Keine Items in dieser Auswahl.
+                    </div>
+                @else
+                    @foreach($itemGroups as $group)
+                        <div class="px-3 pt-3 pb-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--ui-muted)] font-semibold">
+                            <span>{{ $group['label'] }}</span>
+                            <span class="opacity-50 tabular-nums">{{ count($group['items']) }}</span>
+                            <span class="flex-1 h-px bg-[var(--ui-border)]/30"></span>
+                        </div>
+                        <div class="px-2 pb-2 space-y-0.5">
+                            @foreach($group['items'] as $item)
+                                @include('inbox::livewire.v2.partials.stream-item', [
+                                    'item' => $item,
+                                    'bucketKey' => $group['key'],
+                                ])
+                            @endforeach
+                        </div>
                     @endforeach
-                </div>
-            @endif
+                @endif
+            </div>
         </div>
 
         {{-- COCKPIT ------------------------------------------------ --}}
@@ -163,11 +212,15 @@
                             return;
                         }
                         switch (e.key) {
-                            case 'j': e.preventDefault(); this.wire.call('moveSender', 1); break;
-                            case 'k': e.preventDefault(); this.wire.call('moveSender', -1); break;
-                            case 'J': e.preventDefault(); this.wire.call('moveThread', 1); break;
-                            case 'K': e.preventDefault(); this.wire.call('moveThread', -1); break;
-                            case 'Enter': e.preventDefault(); this.wire.call('moveThread', 1); break;
+                            // j/k stepped through senders in the old folded
+                            // stream; with the flat date-grouped list the
+                            // natural unit is the item. Shift+J/K stays as
+                            // an escape hatch for sender-level jumps.
+                            case 'j': e.preventDefault(); this.wire.call('moveItem', 1); break;
+                            case 'k': e.preventDefault(); this.wire.call('moveItem', -1); break;
+                            case 'J': e.preventDefault(); this.wire.call('moveSender', 1); break;
+                            case 'K': e.preventDefault(); this.wire.call('moveSender', -1); break;
+                            case 'Enter': e.preventDefault(); this.wire.call('moveItem', 1); break;
                             case 'Escape': e.preventDefault(); this.wire.call('clearSelection'); break;
                             case 'e':
                                 e.preventDefault();
