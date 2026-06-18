@@ -559,6 +559,12 @@ class InboxIngestionService
         if ($sessionTable === 'user_connector_meeting_sessions') {
             $fields[] = 'organizer_name';
         }
+        // Teams-Chat: chat_display_name ist die stabile Bezeichnung
+        // (DM-Partner oder Gruppen-Topic). Wenn vorhanden, gewinnt sie über
+        // from_identifier (= letzter Sender, kann der eigene Name sein).
+        if ($sessionTable === 'user_connector_message_sessions') {
+            $fields[] = 'chat_display_name';
+        }
 
         $rows = DB::table($sessionTable)
             ->whereIn('id', $ids)
@@ -568,7 +574,10 @@ class InboxIngestionService
         $result = [];
         foreach ($rows as $r) {
             $arr = (array) $r;
-            $arr['_sender_label'] = $arr['from_name'] ?? $arr['organizer_name'] ?? null;
+            $arr['_sender_label'] = $arr['chat_display_name']
+                ?? $arr['from_name']
+                ?? $arr['organizer_name']
+                ?? null;
             $result[$r->id] = $arr;
         }
 
