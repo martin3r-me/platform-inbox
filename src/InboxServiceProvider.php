@@ -28,6 +28,14 @@ class InboxServiceProvider extends ServiceProvider
 
         $this->app->singleton(ChannelRouter::class);
 
+        // Cross-module InboxItem relations. Modules (Whisper, future
+        // call/mail producers) resolve the contract and call link()/
+        // supplements() without touching the Inbox schema directly.
+        $this->app->bind(
+            \Platform\Inbox\Contracts\InboxItemLinkContract::class,
+            \Platform\Inbox\Services\InboxItemLinkService::class
+        );
+
         $this->app->singleton(EnrichmentProviderRegistry::class, function ($app) {
             $registry = new EnrichmentProviderRegistry();
             try {
@@ -52,6 +60,7 @@ class InboxServiceProvider extends ServiceProvider
                 IngestInboxCommand::class,
                 \Platform\Inbox\Console\Commands\BackfillInboxThreadKeys::class,
                 \Platform\Inbox\Console\Commands\RecomputeInboxScores::class,
+                \Platform\Inbox\Console\Commands\ReenrichInboxItems::class,
             ]);
 
             // Schedule registration mirrors what datawarehouse does and what
@@ -99,6 +108,13 @@ class InboxServiceProvider extends ServiceProvider
         if (PlatformCore::getModule('inbox')) {
             ModuleRouter::group('inbox', function () {
                 $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
+            });
+
+            // Bearer-Auth API: /api/inbox/...
+            // Used by external clients (KyberOS Mac app etc.) to discover
+            // the currently-active meeting before kicking off a recording.
+            ModuleRouter::apiGroup('inbox', function () {
+                $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
             });
         }
 
