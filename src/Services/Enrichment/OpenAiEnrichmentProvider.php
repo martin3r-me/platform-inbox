@@ -55,13 +55,33 @@ class OpenAiEnrichmentProvider implements InboxEnrichmentProvider
         }
         $messages[] = ['role' => 'user', 'content' => $prompt];
 
+        // Structured Outputs: das Template-Schema wird an die API gebunden,
+        // damit das Model GENAU die erwarteten Felder produziert. Vorher
+        // lief response_format=json_object — das erzwingt nur "valid JSON"
+        // und das Model improvisierte sich seine eigene Struktur
+        // ({"inhalt": {...}, "absender": {...}}) statt
+        // {"tldr": ..., "headline": ..., "action_items": [...]}. Die
+        // Cockpit-Views lasen dann ins Leere.
+        $responseFormat = ['type' => 'json_object'];
+        $schema = $template->output_schema ?? null;
+        if (is_array($schema) && !empty($schema['type'])) {
+            $responseFormat = [
+                'type' => 'json_schema',
+                'json_schema' => [
+                    'name' => preg_replace('/[^A-Za-z0-9_]+/', '_', (string) ($template->key ?? 'enrichment')),
+                    'schema' => $this->adaptSchemaForStrict($schema),
+                    'strict' => true,
+                ],
+            ];
+        }
+
         try {
             $service = app(OpenAiService::class);
             $response = $service->chat(
                 $messages,
                 $model,
                 [
-                    'response_format' => ['type' => 'json_object'],
+                    'response_format' => $responseFormat,
                     'temperature' => 0.2,
                 ],
             );
@@ -144,5 +164,58 @@ class OpenAiEnrichmentProvider implements InboxEnrichmentProvider
             return null;
         }
         return $tokensIn * $rates['in'] + $tokensOut * $rates['out'];
+    }
+
+    /**
+     * Make a JSON Schema strict-mode compliant for OpenAI Structured Outputs.
+     *
+     * Strict mode requires, at every object level:
+     *   - additionalProperties: false
+     *   - all properties listed in `required`
+     *
+     * Optional fields are kept optional by widening their type to allow null
+     * (so the model can return null instead of omitting). Arrays / nested
+     * objects are processed recursively.
+     *
+     * Existing templates won't have been written with this in mind, so we
+     * adapt at runtime rather than forcing every author to know the rules.
+     *
+     * @param  array<string, mixed>  $schema
+     * @return array<string, mixed>
+     */
+    protected function adaptSchemaForStrict(array $schema): array
+    {
+        $type = $schema['type'] ?? null;
+
+        if ($type === 'object' && isset($schema['properties']) && is_array($schema['properties'])) {
+            $schema['additionalProperties'] = false;
+
+            $allProps = array_keys($schema['properties']);
+            $required = $schema['required'] ?? [];
+            $optional = array_values(array_diff($allProps, $required));
+
+            foreach ($optional as $prop) {
+                $propSchema = $schema['properties'][$prop];
+                $propType = $propSchema['type'] ?? null;
+                if (is_string($propType) && $propType !== 'null') {
+                    $schema['properties'][$prop]['type'] = [$propType, 'null'];
+                } elseif (is_array($propType) && !in_array('null', $propType, true)) {
+                    $schema['properties'][$prop]['type'] = array_merge($propType, ['null']);
+                }
+            }
+            $schema['required'] = $allProps;
+
+            foreach ($schema['properties'] as $k => $v) {
+                if (is_array($v)) {
+                    $schema['properties'][$k] = $this->adaptSchemaForStrict($v);
+                }
+            }
+        }
+
+        if ($type === 'array' && isset($schema['items']) && is_array($schema['items'])) {
+            $schema['items'] = $this->adaptSchemaForStrict($schema['items']);
+        }
+
+        return $schema;
     }
 }
