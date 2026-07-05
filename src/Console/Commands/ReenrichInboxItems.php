@@ -7,6 +7,7 @@ use Platform\Inbox\Jobs\RunEnrichmentJob;
 use Platform\Inbox\Models\InboxEnrichmentTemplate;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxItemEnrichment;
+use Platform\Inbox\Services\Enrichment\EnrichmentPolicy;
 
 /**
  * Re-runs the default enrichment for inbox items whose primary enrichment is
@@ -39,7 +40,7 @@ class ReenrichInboxItems extends Command
      */
     protected array $expectedKeys = ['tldr', 'headline', 'action_items', 'summary'];
 
-    public function handle(): int
+    public function handle(EnrichmentPolicy $policy): int
     {
         $since = (int) $this->option('since');
         $channel = $this->option('channel');
@@ -60,7 +61,13 @@ class ReenrichInboxItems extends Command
         }
 
         $templateCache = [];
-        $stats = ['dispatched' => 0, 'skipped_ok' => 0, 'skipped_no_template' => 0, 'cleared' => 0];
+        $stats = [
+            'dispatched' => 0,
+            'skipped_ok' => 0,
+            'skipped_no_template' => 0,
+            'skipped_policy' => 0,
+            'cleared' => 0,
+        ];
 
         foreach ($items as $item) {
             $ch = $item->channel?->value;
@@ -92,6 +99,18 @@ class ReenrichInboxItems extends Command
                 continue;
             }
 
+            // Policy-Skip: gemutete Sender, Newsletter-Localparts, kurzer Body
+            // etc. Auch beim Backfill respektieren, sonst reenrich-t man
+            // fröhlich all die Instagram-Digests wieder, die man beim
+            // frischen Ingest gerade übersprungen hat.
+            if (!$force && ($reason = $policy->skipReason($item))) {
+                $stats['skipped_policy']++;
+                if ($this->getOutput()->isVerbose()) {
+                    $this->line(" #{$item->id}: skipped ({$reason})");
+                }
+                continue;
+            }
+
             if ($dryRun) {
                 $stats['dispatched']++;
                 continue;
@@ -117,6 +136,7 @@ class ReenrichInboxItems extends Command
                 ['Dispatched', $stats['dispatched']],
                 ['Cleared old rows', $stats['cleared']],
                 ['Skipped (already OK)', $stats['skipped_ok']],
+                ['Skipped (policy)', $stats['skipped_policy']],
                 ['Skipped (no template)', $stats['skipped_no_template']],
                 ['Items scanned', $items->count()],
             ],

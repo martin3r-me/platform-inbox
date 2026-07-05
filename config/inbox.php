@@ -99,4 +99,52 @@ return [
             'skip_outbound' => true,
         ],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Enrichment
+    |--------------------------------------------------------------------------
+    |
+    | Gate für den RunEnrichmentJob-Dispatch. Ohne diese Grenzen kostet
+    | ein voller Inbox-Backfill für einen Team-Account schnell dreistellig
+    | pro Monat, obwohl der Grossteil davon Instagram-Digests und
+    | Wartungsmails sind, die niemand liest.
+    |
+    | skip_sender_patterns: Case-insensitive. Präfix "/" → Regex. Sonst
+    | wird die Zeichenkette als Substring gegen den sender_identifier
+    | geprüft (also 'newsletter@' fängt auch 'newsletters@…' ab).
+    |
+    | min_body_length: alles darunter ist zu dünn für eine sinnvolle
+    | Zusammenfassung — Meeting-Reminder, 1-Zeilen-Bestätigungen etc.
+    */
+    'enrichment' => [
+        'min_body_length' => 200,
+        'skip_sender_patterns' => [
+            // Social-Media-Notification-Domains
+            '@mail.instagram.com',
+            '@notifications.instagram.com',
+            '@instagram.com',
+            '@facebookmail.com',
+            '@linkedin.com',
+            '@twitter.com',
+            '@x.com',
+            '@notifications.slack.com',
+            // Recap / Digest local-parts
+            'posts-recap@',
+            'stories-recap@',
+            'stories@',
+            'newsletter@',
+            'newsletters@',
+            'digest@',
+            'daily-digest@',
+            'weekly-digest@',
+            // Generic notification senders that never carry actionable text
+            'notifications@',
+            'notification@',
+            'no-reply@',
+            'noreply@',
+            'do-not-reply@',
+            'donotreply@',
+        ],
+    ],
 ];

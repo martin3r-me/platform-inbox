@@ -418,6 +418,9 @@ class InboxIngestionService
      * For every freshly created item, look up the default enrichment template
      * for its channel (team-specific overrides global) and dispatch the
      * RunEnrichmentJob. Items without a template just stay un-enriched.
+     * Items that hit an EnrichmentPolicy skip rule (muted sender, notif-only
+     * localpart, too-short body) also stay un-enriched so we don't burn ¢
+     * on Instagram/newsletter noise for the whole team.
      */
     protected function dispatchDefaultEnrichmentForInserts(string $sourceMorph, array $inserts): void
     {
@@ -434,6 +437,7 @@ class InboxIngestionService
 
         // Cache templates per (channel, team) so we don't hammer the DB.
         $templateCache = [];
+        $policy = app(\Platform\Inbox\Services\Enrichment\EnrichmentPolicy::class);
 
         foreach ($items as $item) {
             $channel = $item->channel?->value;
@@ -446,6 +450,14 @@ class InboxIngestionService
             }
             $template = $templateCache[$cacheKey];
             if (!$template) {
+                continue;
+            }
+            if ($reason = $policy->skipReason($item)) {
+                \Log::debug('Inbox: enrichment skipped', [
+                    'item_id' => $item->id,
+                    'sender' => $item->sender_identifier,
+                    'reason' => $reason,
+                ]);
                 continue;
             }
             try {
