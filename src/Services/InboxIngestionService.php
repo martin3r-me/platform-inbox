@@ -415,12 +415,10 @@ class InboxIngestionService
     }
 
     /**
-     * For every freshly created item, look up the default enrichment template
-     * for its channel (team-specific overrides global) and dispatch the
-     * RunEnrichmentJob. Items without a template just stay un-enriched.
-     * Items that hit an EnrichmentPolicy skip rule (muted sender, notif-only
-     * localpart, too-short body) also stay un-enriched so we don't burn ¢
-     * on Instagram/newsletter noise for the whole team.
+     * For every freshly created item, delegate to EnrichmentDispatcher in
+     * auto-mode — that gates on VIP status, so we only spend enrichment
+     * budget on senders the user has flagged as important. Everyone else
+     * gets enriched lazily when the user opens the item in the V2 cockpit.
      */
     protected function dispatchDefaultEnrichmentForInserts(string $sourceMorph, array $inserts): void
     {
@@ -435,37 +433,15 @@ class InboxIngestionService
             ->whereIn('source_id', $sourceIds)
             ->get();
 
-        // Cache templates per (channel, team) so we don't hammer the DB.
-        $templateCache = [];
-        $policy = app(\Platform\Inbox\Services\Enrichment\EnrichmentPolicy::class);
+        $dispatcher = app(\Platform\Inbox\Services\Enrichment\EnrichmentDispatcher::class);
 
         foreach ($items as $item) {
-            $channel = $item->channel?->value;
-            if (!$channel) {
-                continue;
-            }
-            $cacheKey = $channel . '|' . ($item->team_id ?? 0);
-            if (!array_key_exists($cacheKey, $templateCache)) {
-                $templateCache[$cacheKey] = \Platform\Inbox\Models\InboxEnrichmentTemplate::defaultForChannel($channel, $item->team_id);
-            }
-            $template = $templateCache[$cacheKey];
-            if (!$template) {
-                continue;
-            }
-            if ($reason = $policy->skipReason($item)) {
-                \Log::debug('Inbox: enrichment skipped', [
+            $reason = $dispatcher->dispatchIfEligible($item, mode: 'auto');
+            if ($reason !== null) {
+                \Log::debug('Inbox: enrichment not auto-dispatched', [
                     'item_id' => $item->id,
                     'sender' => $item->sender_identifier,
                     'reason' => $reason,
-                ]);
-                continue;
-            }
-            try {
-                \Platform\Inbox\Jobs\RunEnrichmentJob::dispatch($item->id, $template->id);
-            } catch (\Throwable $e) {
-                \Log::warning('Inbox: enrichment dispatch failed', [
-                    'item_id' => $item->id,
-                    'error' => $e->getMessage(),
                 ]);
             }
         }

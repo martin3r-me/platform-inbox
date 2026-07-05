@@ -205,20 +205,15 @@ class InboxAudioIngestionService
 
     protected function dispatchDefaultEnrichment(InboxItem $item): void
     {
-        $channel = $item->channel?->value;
-        if (!$channel) {
-            return;
-        }
-        $template = InboxEnrichmentTemplate::defaultForChannel($channel, $item->team_id);
-        if (!$template) {
-            return;
-        }
-        try {
-            RunEnrichmentJob::dispatch($item->id, $template->id);
-        } catch (\Throwable $e) {
-            \Log::warning('Inbox: audio enrichment dispatch failed', [
+        // Audio recordings are the user's own recorded content (Plaud, Whisper
+        // upload, …) — always high-signal, dispatch in 'user' mode so the
+        // dispatcher applies the skip policy but doesn't gate on VIP.
+        $reason = app(\Platform\Inbox\Services\Enrichment\EnrichmentDispatcher::class)
+            ->dispatchIfEligible($item, mode: 'user');
+        if ($reason !== null) {
+            \Log::debug('Inbox: audio enrichment not dispatched', [
                 'item_id' => $item->id,
-                'error' => $e->getMessage(),
+                'reason' => $reason,
             ]);
         }
     }

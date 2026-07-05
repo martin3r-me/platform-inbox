@@ -61,6 +61,7 @@ class InboxServiceProvider extends ServiceProvider
                 \Platform\Inbox\Console\Commands\BackfillInboxThreadKeys::class,
                 \Platform\Inbox\Console\Commands\RecomputeInboxScores::class,
                 \Platform\Inbox\Console\Commands\ReenrichInboxItems::class,
+                \Platform\Inbox\Console\Commands\AutoClosePastItems::class,
             ]);
 
             // Schedule registration mirrors what datawarehouse does and what
@@ -76,6 +77,9 @@ class InboxServiceProvider extends ServiceProvider
                     ->everyFiveMinutes()
                     ->withoutOverlapping();
                 $schedule->command('inbox:recompute-scores --since=24')
+                    ->hourly()
+                    ->withoutOverlapping();
+                $schedule->command('inbox:auto-close')
                     ->hourly()
                     ->withoutOverlapping();
             });

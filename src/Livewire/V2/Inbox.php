@@ -120,10 +120,18 @@ class Inbox extends Component
         if (!$userId) {
             return ['groups' => [], 'total' => 0, 'counts' => []];
         }
+        // include_future_meetings only when the user has explicitly zoomed
+        // into meetings — otherwise upcoming calendar invites stay in the
+        // sidebar bucket and don't clog the mixed stream with weeks of
+        // "Demnächst" items.
+        $showingMeetings = $this->quickFilter === 'meeting'
+            || $this->filterChannel === 'meeting'
+            || $this->bucket === 'meetings';
         $filters = array_filter([
             'channel' => $this->effectiveChannelFilter(),
             'awaiting' => $this->quickFilter === 'awaiting' ?: null,
             'today' => $this->quickFilter === 'today' ?: null,
+            'include_future_meetings' => $showingMeetings ?: null,
         ]);
         return app(StreamProjector::class)
             ->projectItems($userId, $this->bucket, $filters);
@@ -222,6 +230,12 @@ class Inbox extends Component
     /**
      * Selection for the flat item stream — collapses senderKey + threadKey
      * derivation server-side so the view only deals with item ids.
+     *
+     * On-click enrichment: opening an item is a strong signal that the user
+     * wants to actually read it. If nothing was enriched yet (ingest only
+     * auto-enriches VIP senders), dispatch the job now — dispatcher dedups
+     * so repeated clicks stay cheap and the cockpit's existing skeleton
+     * takes over the loading state.
      */
     public function selectItem(int $itemId): void
     {
@@ -230,6 +244,16 @@ class Inbox extends Component
             return;
         }
         $this->selectThread($row['sender_key'], $row['thread_key']);
+
+        $item = InboxItem::query()
+            ->where('id', $itemId)
+            ->where('user_id', auth()->id())
+            ->first();
+        if ($item) {
+            app(\Platform\Inbox\Services\Enrichment\EnrichmentDispatcher::class)
+                ->dispatchIfEligible($item, mode: 'user');
+            unset($this->cockpitData);
+        }
     }
 
     public function setQuickFilter(?string $key): void

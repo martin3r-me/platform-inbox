@@ -134,6 +134,20 @@ class StreamProjector
             $query->where('received_at', '>=', now()->startOfDay());
         }
 
+        // Zukünftige Meetings gehören konzeptionell in den Kalender, nicht
+        // in die Inbox — der User hat entweder schon RSVP'd oder tut es
+        // beiläufig. Sie im Haupt-Stream sichtbar zu lassen bläht den
+        // "Demnächst"-Bucket über Wochen auf. Nur einblenden, wenn der User
+        // explizit den Meetings-Filter aktiviert hat.
+        $includeFutureMeetings = !empty($filters['include_future_meetings'])
+            || ($filters['channel'] ?? null) === 'meeting';
+        if (!$includeFutureMeetings) {
+            $query->where(function ($q) {
+                $q->where('channel', '!=', 'meeting')
+                    ->orWhere('received_at', '<=', now());
+            });
+        }
+
         $items = $query
             ->orderByDesc('received_at')
             ->limit(2000)

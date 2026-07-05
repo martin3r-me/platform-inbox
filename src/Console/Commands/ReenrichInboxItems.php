@@ -3,11 +3,10 @@
 namespace Platform\Inbox\Console\Commands;
 
 use Illuminate\Console\Command;
-use Platform\Inbox\Jobs\RunEnrichmentJob;
 use Platform\Inbox\Models\InboxEnrichmentTemplate;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxItemEnrichment;
-use Platform\Inbox\Services\Enrichment\EnrichmentPolicy;
+use Platform\Inbox\Services\Enrichment\EnrichmentDispatcher;
 
 /**
  * Re-runs the default enrichment for inbox items whose primary enrichment is
@@ -40,7 +39,7 @@ class ReenrichInboxItems extends Command
      */
     protected array $expectedKeys = ['tldr', 'headline', 'action_items', 'summary'];
 
-    public function handle(EnrichmentPolicy $policy): int
+    public function handle(EnrichmentDispatcher $dispatcher): int
     {
         $since = (int) $this->option('since');
         $channel = $this->option('channel');
@@ -99,26 +98,17 @@ class ReenrichInboxItems extends Command
                 continue;
             }
 
-            // Policy-Skip: gemutete Sender, Newsletter-Localparts, kurzer Body
-            // etc. Auch beim Backfill respektieren, sonst reenrich-t man
-            // fröhlich all die Instagram-Digests wieder, die man beim
-            // frischen Ingest gerade übersprungen hat.
-            if (!$force && ($reason = $policy->skipReason($item))) {
-                $stats['skipped_policy']++;
-                if ($this->getOutput()->isVerbose()) {
-                    $this->line(" #{$item->id}: skipped ({$reason})");
-                }
-                continue;
-            }
-
             if ($dryRun) {
                 $stats['dispatched']++;
                 continue;
             }
 
             // Bestehende Enrichment-Rows für dieses (Item, Template, Version)
-            // löschen — sonst short-circuited RunEnrichmentJob auf die alte
-            // done-Row und macht nichts.
+            // löschen — der Dispatcher sieht sonst die alte done-Row (auch
+            // wenn die Shape kaputt ist steht STATUS_DONE drin) und würde
+            // dedupen. Nach dem Löschen läuft der Dispatcher durch Policy →
+            // dispatched. --force überspringt zusätzlich die Policy-Skips
+            // (Instagram-Digests würden sonst hier hängen bleiben).
             InboxItemEnrichment::query()
                 ->where('inbox_item_id', $item->id)
                 ->where('template_id', $template->id)
@@ -126,7 +116,17 @@ class ReenrichInboxItems extends Command
                 ->delete();
             $stats['cleared']++;
 
-            RunEnrichmentJob::dispatch($item->id, $template->id);
+            $reason = $dispatcher->dispatchIfEligible(
+                $item,
+                mode: $force ? 'force' : 'user',
+            );
+            if ($reason !== null) {
+                $stats['skipped_policy']++;
+                if ($this->getOutput()->isVerbose()) {
+                    $this->line(" #{$item->id}: skipped ({$reason})");
+                }
+                continue;
+            }
             $stats['dispatched']++;
         }
 

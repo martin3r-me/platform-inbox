@@ -2,6 +2,7 @@
 
 namespace Platform\Inbox\Services\Enrichment;
 
+use Illuminate\Support\Facades\DB;
 use Platform\Inbox\Models\InboxItem;
 
 /**
@@ -21,8 +22,14 @@ class EnrichmentPolicy
 {
     /**
      * Should this item be enriched? Returns null on GO, string reason on SKIP.
+     *
+     * $vipOnly gates auto-mode (fresh ingest): only items whose sender is
+     * flagged VIP get an automatic enrichment. Everything else waits for the
+     * user to open the item in the cockpit, which triggers a dispatch through
+     * this same policy with $vipOnly=false. Rationale: at 30+ mails/day/user
+     * we spent 90% of the enrichment budget on items nobody ever read.
      */
-    public function skipReason(InboxItem $item): ?string
+    public function skipReason(InboxItem $item, bool $vipOnly = false): ?string
     {
         // 1) Only new items. Snoozed / done / ignored either won't be seen
         //    or the user explicitly declared them uninteresting.
@@ -31,7 +38,21 @@ class EnrichmentPolicy
             return "status={$status}";
         }
 
-        // 2) Body must have enough substance for a summary to add value.
+        // 2) Auto-mode: skip anything whose sender isn't marked VIP.
+        //    Verzicht auf die 200er-Skip-Regeln unten wenn VIP → auch kurze
+        //    "Hallo, kurz zurückrufen" von einem VIP wird enriched.
+        if ($vipOnly) {
+            if (!$this->isVipSender(
+                (int) ($item->user_id ?? 0),
+                (string) ($item->sender_kind ?? ''),
+                $item->sender_identifier,
+            )) {
+                return 'not VIP (auto-mode)';
+            }
+            return null;
+        }
+
+        // 3) Body must have enough substance for a summary to add value.
         //    Meeting reminders, 1-liner receipts etc. score below this bar.
         $body = trim((string) ($item->body ?? $item->preview ?? ''));
         $minBody = (int) config('inbox.enrichment.min_body_length', 200);
@@ -39,7 +60,7 @@ class EnrichmentPolicy
             return 'body too short (' . mb_strlen($body) . ' < ' . $minBody . ')';
         }
 
-        // 3) Sender pattern list — social media recaps, newsletter platforms,
+        // 4) Sender pattern list — social media recaps, newsletter platforms,
         //    generic notification senders. Prefix "/" activates regex; plain
         //    strings match as case-insensitive substring on sender_identifier.
         $sender = strtolower((string) ($item->sender_identifier ?? ''));
@@ -63,5 +84,23 @@ class EnrichmentPolicy
         }
 
         return null;
+    }
+
+    /**
+     * VIP status is stored on inbox_sender_subscriptions.is_vip and set via
+     * the sender-subscription UI / inbox.items.sender.POST(op=vip). Missing
+     * subscription row → not VIP.
+     */
+    public function isVipSender(int $userId, string $kind, ?string $identifier): bool
+    {
+        if ($userId <= 0 || $kind === '' || $identifier === null || $identifier === '') {
+            return false;
+        }
+        return (bool) DB::table('inbox_sender_subscriptions')
+            ->where('user_id', $userId)
+            ->where('sender_kind', $kind)
+            ->where('sender_identifier', $identifier)
+            ->where('is_vip', true)
+            ->exists();
     }
 }
