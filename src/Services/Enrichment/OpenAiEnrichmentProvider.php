@@ -224,9 +224,12 @@ class OpenAiEnrichmentProvider implements InboxEnrichmentProvider
      */
     protected function adaptSchemaForStrict(array $schema): array
     {
-        $type = $schema['type'] ?? null;
-
-        if ($type === 'object' && isset($schema['properties']) && is_array($schema['properties'])) {
+        // Dispatch on structure, NOT on the (possibly widened) type string.
+        // Once we mark an optional field nullable, its `type` becomes
+        // ['array', 'null'] and a `$type === 'array'` guard silently stops
+        // recursing into `items` — that leaves nested object schemas without
+        // additionalProperties:false and OpenAI rejects the whole request.
+        if (isset($schema['properties']) && is_array($schema['properties'])) {
             $schema['additionalProperties'] = false;
 
             $allProps = array_keys($schema['properties']);
@@ -251,7 +254,7 @@ class OpenAiEnrichmentProvider implements InboxEnrichmentProvider
             }
         }
 
-        if ($type === 'array' && isset($schema['items']) && is_array($schema['items'])) {
+        if (isset($schema['items']) && is_array($schema['items'])) {
             $schema['items'] = $this->adaptSchemaForStrict($schema['items']);
         }
 
