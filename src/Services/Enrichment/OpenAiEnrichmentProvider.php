@@ -2,7 +2,8 @@
 
 namespace Platform\Inbox\Services\Enrichment;
 
-use Platform\Core\Services\OpenAiService;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Platform\Inbox\Contracts\InboxEnrichmentProvider;
 use Platform\Inbox\Models\InboxEnrichmentTemplate;
 use Platform\Inbox\Models\InboxItem;
@@ -56,16 +57,26 @@ class OpenAiEnrichmentProvider implements InboxEnrichmentProvider
         $messages[] = ['role' => 'user', 'content' => $prompt];
 
         // Structured Outputs: das Template-Schema wird an die API gebunden,
-        // damit das Model GENAU die erwarteten Felder produziert. Vorher
-        // lief response_format=json_object — das erzwingt nur "valid JSON"
-        // und das Model improvisierte sich seine eigene Struktur
-        // ({"inhalt": {...}, "absender": {...}}) statt
-        // {"tldr": ..., "headline": ..., "action_items": [...]}. Die
-        // Cockpit-Views lasen dann ins Leere.
-        $responseFormat = ['type' => 'json_object'];
+        // damit das Model GENAU die erwarteten Felder produziert.
+        //
+        // Bypass Platform\Core\Services\OpenAiService: der Service ruft die
+        // Responses-API (/v1/responses) auf und lässt `response_format` aus
+        // den options fallen — Structured Outputs bräuchte dort `text.format`
+        // statt `response_format`. Für die Anreicherung wollen wir aber die
+        // simplere Chat-Completions-API mit json_schema/strict, und wir
+        // brauchen sowieso keine Tools/Reasoning-Features. Direkter Call an
+        // /v1/chat/completions ist kürzer, günstiger und tut GENAU das was
+        // hier gebraucht wird.
+        $requestBody = [
+            'model' => $model,
+            'messages' => $messages,
+            'temperature' => 0.2,
+            'response_format' => ['type' => 'json_object'],
+        ];
+
         $schema = $template->output_schema ?? null;
         if (is_array($schema) && !empty($schema['type'])) {
-            $responseFormat = [
+            $requestBody['response_format'] = [
                 'type' => 'json_schema',
                 'json_schema' => [
                     'name' => preg_replace('/[^A-Za-z0-9_]+/', '_', (string) ($template->key ?? 'enrichment')),
@@ -75,31 +86,51 @@ class OpenAiEnrichmentProvider implements InboxEnrichmentProvider
             ];
         }
 
+        $apiKey = $this->resolveApiKey();
+        if (!$apiKey) {
+            return EnrichmentResult::fail('OPENAI_API_KEY not configured.', $model);
+        }
+
         try {
-            $service = app(OpenAiService::class);
-            $response = $service->chat(
-                $messages,
-                $model,
-                [
-                    'response_format' => $responseFormat,
-                    'temperature' => 0.2,
-                ],
-            );
+            $response = Http::withToken($apiKey)
+                ->acceptJson()
+                ->asJson()
+                ->timeout(60)
+                ->post('https://api.openai.com/v1/chat/completions', $requestBody);
         } catch (\Throwable $e) {
             return EnrichmentResult::fail($e->getMessage(), $model);
         }
 
-        $content = $response['content'] ?? '';
-        $usage = $response['usage'] ?? [];
         $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
+
+        if (!$response->successful()) {
+            $errorBody = mb_substr($response->body(), 0, 500);
+            Log::warning('Inbox: OpenAI enrichment API error', [
+                'status' => $response->status(),
+                'model' => $model,
+                'template_key' => $template->key,
+                'body_preview' => $errorBody,
+            ]);
+            return EnrichmentResult::fail(
+                'OpenAI API error ' . $response->status() . ': ' . $errorBody,
+                $model,
+            );
+        }
+
+        $data = $response->json();
+        $content = (string) ($data['choices'][0]['message']['content'] ?? '');
+        if ($content === '') {
+            return EnrichmentResult::fail('Provider returned empty content.', $model);
+        }
 
         $output = $this->parseJson($content);
         if ($output === null) {
             return EnrichmentResult::fail('Provider returned non-JSON content.', $model);
         }
 
-        $tokensIn = (int) ($usage['input_tokens'] ?? $usage['prompt_tokens'] ?? 0);
-        $tokensOut = (int) ($usage['output_tokens'] ?? $usage['completion_tokens'] ?? 0);
+        $usage = $data['usage'] ?? [];
+        $tokensIn = (int) ($usage['prompt_tokens'] ?? 0);
+        $tokensOut = (int) ($usage['completion_tokens'] ?? 0);
 
         return EnrichmentResult::ok(
             output: $output,
@@ -109,6 +140,14 @@ class OpenAiEnrichmentProvider implements InboxEnrichmentProvider
             costMicroCents: $this->estimateCost($model, $tokensIn, $tokensOut),
             durationMs: $durationMs,
         );
+    }
+
+    protected function resolveApiKey(): ?string
+    {
+        $key = config('services.openai.api_key')
+            ?? config('services.openai.key')
+            ?? env('OPENAI_API_KEY');
+        return (is_string($key) && $key !== '') ? $key : null;
     }
 
     protected function resolveModel(InboxEnrichmentTemplate $template): string
