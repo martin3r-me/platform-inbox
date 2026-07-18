@@ -158,6 +158,8 @@ class InboxIngestionService
                 'user_id' => $row->owner_user_id,
                 'source_type' => $sourceMorph,
                 'source_id' => $row->session_id,
+                'series_master_id' => $session['series_master_id'] ?? null,
+                'occurrence_type' => $session['occurrence_type'] ?? null,
                 'channel' => $cfg['channel'],
                 'sender_identifier' => $senderIdentifier,
                 'sender_kind' => $cfg['sender_kind'],
@@ -546,6 +548,9 @@ class InboxIngestionService
         }
         if ($sessionTable === 'user_connector_meeting_sessions') {
             $fields[] = 'organizer_name';
+            // Serien-Identität bis ins Inbox-Item durchreichen (Phase B).
+            $fields[] = 'series_master_id';
+            $fields[] = 'occurrence_type';
         }
         // Teams-Chat: chat_display_name ist die stabile Bezeichnung
         // (DM-Partner oder Gruppen-Topic). Wenn vorhanden, gewinnt sie über

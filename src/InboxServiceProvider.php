@@ -62,6 +62,8 @@ class InboxServiceProvider extends ServiceProvider
                 \Platform\Inbox\Console\Commands\RecomputeInboxScores::class,
                 \Platform\Inbox\Console\Commands\ReenrichInboxItems::class,
                 \Platform\Inbox\Console\Commands\AutoClosePastItems::class,
+                \Platform\Inbox\Console\Commands\MaterializeMeetingTimeCommand::class,
+                \Platform\Inbox\Console\Commands\BackfillMeetingSeriesCommand::class,
             ]);
 
             // Schedule registration mirrors what datawarehouse does and what
@@ -82,6 +84,11 @@ class InboxServiceProvider extends ServiceProvider
                 $schedule->command('inbox:auto-close')
                     ->hourly()
                     ->withoutOverlapping();
+                // Abends, vor dem Organization-Evening-Snapshot (18:00), damit die
+                // heute stattgefundenen Termine noch in den Abend-Snapshot einfließen.
+                $schedule->command('inbox:materialize-meeting-time')
+                    ->dailyAt('17:45')
+                    ->withoutOverlapping();
             });
         }
     }
@@ -92,6 +99,18 @@ class InboxServiceProvider extends ServiceProvider
             'inbox_item' => InboxItem::class,
             'inbox_sender_subscription' => InboxSenderSubscription::class,
         ]);
+
+        // Am Knoten verlinkte Inbox-Items als Zeit-Kontext registrieren, damit
+        // gebuchte Meeting-Zeit (MaterializeMeetingTimeCommand) in die Ist-Zeiten
+        // des Knotens aufläuft. Soft-gekoppelt: ohne Organization-Modul No-op.
+        try {
+            if (class_exists(\Platform\Organization\Services\EntityLinkRegistry::class)) {
+                resolve(\Platform\Organization\Services\EntityLinkRegistry::class)
+                    ->register(new \Platform\Inbox\Organization\InboxEntityLinkProvider());
+            }
+        } catch (\Throwable $e) {
+            // Organization-Modul nicht geladen — Meeting-Zeit aggregiert dann nicht.
+        }
 
         if (
             config()->has('inbox.routing') &&
