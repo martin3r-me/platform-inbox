@@ -54,6 +54,11 @@ class InboxServiceProvider extends ServiceProvider
             \Platform\Inbox\Services\InboxMailQueryService::class
         );
 
+        $this->app->bind(
+            \Platform\Inbox\Contracts\InboxCallQueryContract::class,
+            \Platform\Inbox\Services\InboxCallQueryService::class
+        );
+
         $this->app->singleton(EnrichmentProviderRegistry::class, function ($app) {
             $registry = new EnrichmentProviderRegistry();
             try {

@@ -72,15 +72,16 @@ class InboxRecordingCorrelator
         $recEnd = $recStart->copy()->addSeconds($durationSec > 0 ? $durationSec : self::DEFAULT_MINUTES * 60);
         $bufferSec = self::BUFFER_MINUTES * 60;
 
-        $meetings = InboxItem::query()
+        // Kandidaten sind Meeting- UND Anruf-Items — Transkripte hängen an beidem.
+        $candidates = InboxItem::query()
             ->where('user_id', $recording->user_id)
-            ->where('channel', Channel::Meeting->value)
+            ->whereIn('channel', [Channel::Meeting->value, Channel::Call->value])
             ->whereBetween('received_at', [$recStart->copy()->subDay(), $recStart->copy()->addDay()])
             ->with('source')
             ->get();
 
-        return $meetings->filter(function (InboxItem $meeting) use ($recStart, $recEnd, $bufferSec) {
-            [$mStart, $mEnd] = $this->meetingWindow($meeting);
+        return $candidates->filter(function (InboxItem $item) use ($recStart, $recEnd, $bufferSec) {
+            [$mStart, $mEnd] = $this->itemWindow($item);
             if (!$mStart) {
                 return false;
             }
@@ -99,7 +100,7 @@ class InboxRecordingCorrelator
      */
     public function suggestionsForMeeting(InboxItem $meeting): Collection
     {
-        [$mStart, $mEnd] = $this->meetingWindow($meeting);
+        [$mStart, $mEnd] = $this->itemWindow($meeting);
         if (!$mStart) {
             return collect();
         }
@@ -126,16 +127,37 @@ class InboxRecordingCorrelator
         })->values();
     }
 
-    /** @return array{0: ?Carbon, 1: ?Carbon} [start, end] des Meeting-Fensters. */
-    protected function meetingWindow(InboxItem $meeting): array
+    /**
+     * Zeitfenster eines Kandidaten — Meeting (start_at/end_at) oder Anruf
+     * (started_at/ended_at bzw. + duration_seconds).
+     *
+     * @return array{0: ?Carbon, 1: ?Carbon} [start, end]
+     */
+    protected function itemWindow(InboxItem $item): array
     {
-        $session = $meeting->source;
-        $start = ($session && $session->start_at) ? Carbon::parse($session->start_at)
-            : ($meeting->received_at ? Carbon::parse($meeting->received_at) : null);
+        $s = $item->source;
+        $channel = $item->channel?->value;
+
+        if ($channel === Channel::Call->value) {
+            $start = ($s && $s->started_at) ? Carbon::parse($s->started_at)
+                : ($item->received_at ? Carbon::parse($item->received_at) : null);
+            if (!$start) {
+                return [null, null];
+            }
+            $end = ($s && $s->ended_at) ? Carbon::parse($s->ended_at)
+                : (($s && $s->duration_seconds) ? $start->copy()->addSeconds((int) $s->duration_seconds)
+                    : $start->copy()->addMinutes(self::DEFAULT_MINUTES));
+
+            return [$start, $end];
+        }
+
+        // Default: Meeting.
+        $start = ($s && $s->start_at) ? Carbon::parse($s->start_at)
+            : ($item->received_at ? Carbon::parse($item->received_at) : null);
         if (!$start) {
             return [null, null];
         }
-        $end = ($session && $session->end_at) ? Carbon::parse($session->end_at)
+        $end = ($s && $s->end_at) ? Carbon::parse($s->end_at)
             : $start->copy()->addMinutes(self::DEFAULT_MINUTES);
 
         return [$start, $end];
