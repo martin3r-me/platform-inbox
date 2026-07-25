@@ -142,7 +142,7 @@ class InboxEntityLinkService
         }
         $like = '%' . $q . '%';
 
-        return DB::table('organization_entities as e')
+        $rows = DB::table('organization_entities as e')
             ->leftJoin('organization_entity_types as t', 't.id', '=', 'e.entity_type_id')
             ->leftJoin('organization_entities as p', 'p.id', '=', 'e.parent_entity_id')
             ->where('e.team_id', $teamId)
@@ -158,15 +158,38 @@ class InboxEntityLinkService
             ->orderBy('p.name')
             ->orderBy('e.name')
             ->limit($limit)
-            ->get(['e.id', 'e.name', 'e.code', 't.name as type_name', 'p.name as parent_name'])
-            ->map(fn ($r) => [
+            ->get(['e.id', 'e.name', 'e.code', 't.name as type_name', 'e.parent_entity_id']);
+
+        if ($rows->isEmpty()) {
+            return [];
+        }
+
+        // Voller Ahnen-Pfad (Adjazenzliste über parent_entity_id) — macht auch tiefe,
+        // gleichnamige Container eindeutig (z. B. FOOD.WORKS › Foundation › Betrieb).
+        $lookup = DB::table('organization_entities')
+            ->where('team_id', $teamId)
+            ->whereNull('deleted_at')
+            ->get(['id', 'name', 'parent_entity_id'])
+            ->keyBy('id');
+
+        return $rows->map(function ($r) use ($lookup) {
+            $path = [];
+            $pid = $r->parent_entity_id;
+            $guard = 0;
+            while ($pid && isset($lookup[$pid]) && $guard++ < 12) {
+                array_unshift($path, $lookup[$pid]->name);
+                $pid = $lookup[$pid]->parent_entity_id;
+            }
+
+            return [
                 'id' => (int) $r->id,
                 'name' => $r->name,
                 'code' => $r->code,
                 'type' => $r->type_name,
-                'parent' => $r->parent_name,
-            ])
-            ->all();
+                'parent' => $path ? end($path) : null,        // unmittelbarer Eltern-Knoten
+                'path' => $path ? implode(' › ', $path) : null, // voller Ahnen-Pfad
+            ];
+        })->all();
     }
 
     /**
