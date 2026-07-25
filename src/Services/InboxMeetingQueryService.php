@@ -32,13 +32,13 @@ class InboxMeetingQueryService implements InboxMeetingQueryContract
 
         $today = Carbon::today();
 
-        // Nach Serie gruppieren: alle Vorkommen einer Serie (series_master_id) → EINE Zeile.
-        // Einzeltermine (kein series_master_id) bilden je eine eigene Gruppe.
+        // Nach realer Termin-Identität gruppieren: alle Vorkommen desselben Termins
+        // (iCalUId, Fallback series_master_id) → EINE Zeile. iCalUId ist über
+        // Vorkommen UND Postfächer stabil; series_master_id nur pro Postfach.
         $groups = [];
         foreach ($items as $item) {
-            $key = $item->series_master_id
-                ? 'series:' . $item->series_master_id
-                : 'single:' . $item->id;
+            $identity = $item->ical_uid ?: $item->series_master_id;
+            $key = $identity ? 'id:' . $identity : 'single:' . $item->id;
             $groups[$key][] = $item;
         }
 
@@ -67,7 +67,7 @@ class InboxMeetingQueryService implements InboxMeetingQueryContract
                 'when'               => $this->whenLabel($start),
                 'time_short'         => $start ? $start->format('H:i') : '',
                 'participants_count' => (int) ($rep->participants_count ?? 0),
-                'is_series'          => $rep->series_master_id !== null,
+                'is_series'          => $rep->series_master_id !== null || count($occurrences) > 1,
                 'series_count'       => count($occurrences),
                 'section'            => $upcoming ? 'upcoming' : 'past',
                 'unread'             => $rep->status?->value === InboxItemStatus::New->value,
@@ -119,6 +119,15 @@ class InboxMeetingQueryService implements InboxMeetingQueryContract
             ->values()
             ->all();
 
+        // Wie viele offene Vorkommen desselben Termins (iCalUId, Fallback series_master_id)?
+        $identity = $item->ical_uid ?: $item->series_master_id;
+        $seriesCount = $identity
+            ? InboxItem::where('user_id', $item->user_id)
+                ->where($item->ical_uid ? 'ical_uid' : 'series_master_id', $identity)
+                ->where('status', InboxItemStatus::New->value)
+                ->count()
+            : 1;
+
         return [
             'channel'       => 'meeting',
             'channel_label' => 'Meeting',
@@ -130,13 +139,8 @@ class InboxMeetingQueryService implements InboxMeetingQueryContract
             'participants'  => $participants,
             'agenda'        => $this->splitLines(($s->body_preview ?? null) ?: ($item->body ?? $item->preview ?? null)),
             'join_url'      => $s->online_meeting_url ?? null,
-            'is_series'     => $item->series_master_id !== null,
-            'series_count'  => $item->series_master_id
-                ? InboxItem::where('user_id', $item->user_id)
-                    ->where('series_master_id', $item->series_master_id)
-                    ->where('status', InboxItemStatus::New->value)
-                    ->count()
-                : 1,
+            'is_series'     => $item->series_master_id !== null || $seriesCount > 1,
+            'series_count'  => $seriesCount,
             'meeting_id'    => $item->meeting_id,   // gesetzt = zu echtem Meeting promotet (Inbox-Feld)
             'recording'     => $this->recording($item),
             'context'       => $this->entities($item),

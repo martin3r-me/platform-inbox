@@ -26,6 +26,7 @@ class InboxItem extends Model
         'source_type',
         'source_id',
         'series_master_id',
+        'ical_uid',
         'occurrence_type',
         'meeting_id',
         'thread_key',

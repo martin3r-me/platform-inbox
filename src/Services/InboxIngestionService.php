@@ -159,6 +159,7 @@ class InboxIngestionService
                 'source_type' => $sourceMorph,
                 'source_id' => $row->session_id,
                 'series_master_id' => $session['series_master_id'] ?? null,
+                'ical_uid' => $session['ical_uid'] ?? null,
                 'occurrence_type' => $session['occurrence_type'] ?? null,
                 'channel' => $cfg['channel'],
                 'sender_identifier' => $senderIdentifier,
@@ -550,6 +551,7 @@ class InboxIngestionService
             $fields[] = 'organizer_name';
             // Serien-Identität bis ins Inbox-Item durchreichen (Phase B).
             $fields[] = 'series_master_id';
+            $fields[] = 'ical_uid';
             $fields[] = 'occurrence_type';
         }
         // Teams-Chat: chat_display_name ist die stabile Bezeichnung
