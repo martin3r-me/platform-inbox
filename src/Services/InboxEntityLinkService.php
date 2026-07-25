@@ -154,6 +154,52 @@ class InboxEntityLinkService
     }
 
     /**
+     * Auto-Propagation: hängt alle weiteren Inbox-Items DESSELBEN realen Termins
+     * (gleiche iCalUId, gleiches Team, andere Nutzer) an denselben Knoten — damit
+     * jede/r gesyncte Beteiligte automatisch seine Zeit dort bucht (über sein
+     * eigenes Item; die Buchung selbst bleibt pro Person, kein Doppelzählen).
+     *
+     * @return int Anzahl verlinkter Geschwister-Items.
+     */
+    public function linkSiblingsByIcalUid(InboxItem $item, int $entityId): int
+    {
+        return $this->applyToSiblings($item, fn (InboxItem $s) => $this->link($s, $entityId));
+    }
+
+    /**
+     * Gegenstück zu linkSiblingsByIcalUid: löst denselben Knoten von allen
+     * Geschwister-Items — der Termin wandert für ALLE Beteiligten vom Knoten weg.
+     *
+     * @return int Anzahl gelöster Geschwister-Items.
+     */
+    public function unlinkSiblingsByIcalUid(InboxItem $item, int $entityId): int
+    {
+        return $this->applyToSiblings($item, fn (InboxItem $s) => $this->unlink($s, $entityId));
+    }
+
+    protected function applyToSiblings(InboxItem $item, callable $fn): int
+    {
+        if (!$this->enabled() || empty($item->ical_uid)) {
+            return 0;
+        }
+
+        $siblings = InboxItem::query()
+            ->where('team_id', $item->team_id)
+            ->where('ical_uid', $item->ical_uid)
+            ->where('id', '!=', $item->id)
+            ->get();
+
+        $count = 0;
+        foreach ($siblings as $sibling) {
+            if ($fn($sibling)) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    /**
      * Search entities by name/code within the user's team scope.
      * @return array<int, array{id:int, name:string, type:string|null, code:string|null}>
      */
