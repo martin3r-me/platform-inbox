@@ -9,6 +9,7 @@ enum Channel: string
     case Message = 'message';
     case Meeting = 'meeting';
     case Recording = 'recording';
+    case System = 'system';
 
     public function label(): string
     {
@@ -18,6 +19,7 @@ enum Channel: string
             self::Message => 'Nachricht',
             self::Meeting => 'Meeting',
             self::Recording => 'Aufnahme',
+            self::System => 'System',
         };
     }
 
@@ -29,6 +31,7 @@ enum Channel: string
             self::Message => 'heroicon-o-chat-bubble-left',
             self::Meeting => 'heroicon-o-calendar-days',
             self::Recording => 'heroicon-o-microphone',
+            self::System => 'heroicon-o-bell',
         };
     }
 }

@@ -36,6 +36,13 @@ class InboxServiceProvider extends ServiceProvider
             \Platform\Inbox\Services\InboxItemLinkService::class
         );
 
+        // Push-Kontrakt: interne Ereignisse anderer Module in die Inbox liefern.
+        // Kurzform: \Platform\Inbox\Inbox::deliver([...]).
+        $this->app->bind(
+            \Platform\Inbox\Contracts\InboxDelivery::class,
+            \Platform\Inbox\Services\InboxDeliveryService::class
+        );
+
         $this->app->singleton(EnrichmentProviderRegistry::class, function ($app) {
             $registry = new EnrichmentProviderRegistry();
             try {
