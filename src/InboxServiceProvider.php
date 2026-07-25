@@ -43,6 +43,12 @@ class InboxServiceProvider extends ServiceProvider
             \Platform\Inbox\Services\InboxDeliveryService::class
         );
 
+        // Query-Kontrakt Meeting-Kanal: home rendert damit den Reading-Pane.
+        $this->app->bind(
+            \Platform\Inbox\Contracts\InboxMeetingQueryContract::class,
+            \Platform\Inbox\Services\InboxMeetingQueryService::class
+        );
+
         $this->app->singleton(EnrichmentProviderRegistry::class, function ($app) {
             $registry = new EnrichmentProviderRegistry();
             try {
