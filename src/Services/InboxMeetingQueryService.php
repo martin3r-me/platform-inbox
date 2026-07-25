@@ -3,23 +3,22 @@
 namespace Platform\Inbox\Services;
 
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Str;
 use Platform\Inbox\Contracts\InboxMeetingQueryContract;
 use Platform\Inbox\Enums\Channel;
 use Platform\Inbox\Enums\InboxItemStatus;
 use Platform\Inbox\Models\InboxItem;
 
 /**
- * Meeting-Query für die persönliche Sicht (home). Bündelt InboxItem +
- * user-connectors-Session (via source-Morph) + Teilnehmer + Aufnahme (Segmente)
- * + Org-Knoten zu normalisierten Arrays. Defensiv: fehlende Teile → leer/null.
+ * Meeting-Query für die persönliche Sicht (home). Die LISTE kommt komplett aus
+ * InboxItem-Feldern (kein source-Morph nötig — robust). Erst das DETAIL zieht die
+ * user-connectors-Session + Teilnehmer + Aufnahme + Org-Knoten, defensiv/soft-coupled.
+ *
+ * Inbox ist user-scoped (wie das kanonische ListItemsTool) — KEIN team_id-Filter.
  */
 class InboxMeetingQueryService implements InboxMeetingQueryContract
 {
     public function listForUser(int $userId, int $teamId, int $limit = 20): array
     {
-        // Inbox ist user-scoped (wie das kanonische ListItemsTool) — KEIN team_id-Filter,
-        // sonst matcht der dynamische currentTeam das gespeicherte team_id der Items nicht.
         $items = InboxItem::query()
             ->where('user_id', $userId)
             ->where('channel', Channel::Meeting->value)
@@ -28,21 +27,22 @@ class InboxMeetingQueryService implements InboxMeetingQueryContract
                 $q->whereNull('snoozed_until')->orWhere('snoozed_until', '<=', now());
             })
             ->orderByDesc('received_at')
-            ->with(['source', 'participants'])
+            ->withCount('participants')
             ->limit($limit)
             ->get();
 
         return $items->map(function (InboxItem $item) {
-            $s = $item->source; // UserConnectorMeetingSession (oder null)
+            $start = $item->received_at ? Carbon::parse($item->received_at) : null; // = Termin-Start
+
             return [
                 'id'                 => (int) $item->id,
-                'subject'            => $s->subject ?? $item->subject ?? 'Meeting',
-                'organizer'          => $s->organizer_name ?? $s->organizer_address ?? $item->sender_label,
-                'when'               => $this->formatWhen($s),
-                'time_short'         => $s && $s->start_at ? Carbon::parse($s->start_at)->format('H:i') : '',
-                'participants_count' => $item->participants->count(),
-                'is_online'          => (bool) ($s->is_online_meeting ?? false),
-                'is_recurring'       => ($s->series_master_id ?? null) !== null,
+                'subject'            => $item->subject ?: 'Meeting',
+                'organizer'          => $item->sender_label ?: $item->sender_identifier,
+                'when'               => $this->whenLabel($start),
+                'time_short'         => $start ? $start->format('H:i') : '',
+                'participants_count' => (int) ($item->participants_count ?? 0),
+                'is_online'          => false,
+                'is_recurring'       => $item->series_master_id !== null,
                 'unread'             => $item->status?->value === InboxItemStatus::New->value,
             ];
         })->all();
@@ -50,13 +50,23 @@ class InboxMeetingQueryService implements InboxMeetingQueryContract
 
     public function detailForItem(int $inboxItemId): ?array
     {
-        $item = InboxItem::with(['source', 'participants'])->find($inboxItemId);
+        $item = InboxItem::with(['participants'])->find($inboxItemId);
 
         if (!$item || $item->channel?->value !== Channel::Meeting->value) {
             return null;
         }
 
-        $s = $item->source;
+        // Session defensiv laden (morphTo kann fehlschlagen, wenn Quelle weg ist).
+        $s = null;
+        try {
+            $s = $item->source;
+        } catch (\Throwable $e) {
+            $s = null;
+        }
+
+        $start = $s && $s->start_at ? Carbon::parse($s->start_at)
+            : ($item->received_at ? Carbon::parse($item->received_at) : null);
+        $end = $s && $s->end_at ? Carbon::parse($s->end_at) : null;
 
         $participants = $item->participants
             ->map(fn ($p) => $p->display_name ?: $p->identifier)
@@ -67,22 +77,21 @@ class InboxMeetingQueryService implements InboxMeetingQueryContract
         return [
             'channel'       => 'meeting',
             'channel_label' => 'Meeting',
-            'subject'       => $s->subject ?? $item->subject ?? 'Meeting',
-            'sender'        => $s->organizer_name ?? $s->organizer_address ?? 'Organisator',
-            'time'          => $this->formatWhen($s),
-            'summary'       => $s->body_preview ?? null,
-            'when'          => $this->formatWhen($s),
+            'subject'       => ($s->subject ?? null) ?: ($item->subject ?: 'Meeting'),
+            'sender'        => ($s->organizer_name ?? null) ?: ($s->organizer_address ?? $item->sender_label ?? 'Organisator'),
+            'time'          => $this->whenRange($start, $end),
+            'summary'       => ($s->body_preview ?? null) ?: null,
+            'when'          => $this->whenRange($start, $end),
             'participants'  => $participants,
-            'agenda'        => $this->splitLines($s->body_preview ?? null),
+            'agenda'        => $this->splitLines(($s->body_preview ?? null) ?: ($item->body ?? $item->preview ?? null)),
             'join_url'      => $s->online_meeting_url ?? null,
-            'is_recurring'  => ($s->series_master_id ?? null) !== null,
+            'is_recurring'  => $item->series_master_id !== null,
             'recording'     => $this->recording($item),
             'context'       => $this->entities($item),
             'related'       => null,
         ];
     }
 
-    /** Org-Knoten des Items als Chips. */
     protected function entities(InboxItem $item): array
     {
         try {
@@ -96,7 +105,6 @@ class InboxMeetingQueryService implements InboxMeetingQueryContract
             ->all();
     }
 
-    /** Verknüpfte Aufnahme + Transcript-Segmente (falls vorhanden). */
     protected function recording(InboxItem $item): ?array
     {
         try {
@@ -123,20 +131,25 @@ class InboxMeetingQueryService implements InboxMeetingQueryContract
         }
     }
 
-    protected function formatWhen($session): string
+    protected function whenLabel(?Carbon $start): string
     {
-        if (!$session || !$session->start_at) {
+        if (!$start) {
             return '—';
         }
-
-        $start = Carbon::parse($session->start_at);
         $day = $start->isToday() ? 'Heute' : $start->locale('de')->isoFormat('dd D.M.');
-        $times = $start->format('H:i');
-        if ($session->end_at) {
-            $times .= '–' . Carbon::parse($session->end_at)->format('H:i');
-        }
+        return trim("{$day} " . $start->format('H:i'));
+    }
 
-        return trim("{$day} {$times}");
+    protected function whenRange(?Carbon $start, ?Carbon $end): string
+    {
+        if (!$start) {
+            return '—';
+        }
+        $label = $this->whenLabel($start);
+        if ($end) {
+            $label .= '–' . $end->format('H:i');
+        }
+        return $label;
     }
 
     /** @return array<int,string> */
