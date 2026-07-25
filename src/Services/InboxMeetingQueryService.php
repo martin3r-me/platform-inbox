@@ -86,6 +86,7 @@ class InboxMeetingQueryService implements InboxMeetingQueryContract
             'agenda'        => $this->splitLines(($s->body_preview ?? null) ?: ($item->body ?? $item->preview ?? null)),
             'join_url'      => $s->online_meeting_url ?? null,
             'is_recurring'  => $item->series_master_id !== null,
+            'meeting_id'    => $item->meeting_id,   // gesetzt = zu echtem Meeting promotet (Inbox-Feld)
             'recording'     => $this->recording($item),
             'context'       => $this->entities($item),
             'related'       => null,
