@@ -18,9 +18,10 @@ class InboxMeetingQueryService implements InboxMeetingQueryContract
 {
     public function listForUser(int $userId, int $teamId, int $limit = 20): array
     {
+        // Inbox ist user-scoped (wie das kanonische ListItemsTool) — KEIN team_id-Filter,
+        // sonst matcht der dynamische currentTeam das gespeicherte team_id der Items nicht.
         $items = InboxItem::query()
             ->where('user_id', $userId)
-            ->where('team_id', $teamId)
             ->where('channel', Channel::Meeting->value)
             ->where('status', InboxItemStatus::New->value)
             ->where(function ($q) {
