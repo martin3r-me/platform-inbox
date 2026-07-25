@@ -77,6 +77,7 @@ class InboxServiceProvider extends ServiceProvider
                 \Platform\Inbox\Console\Commands\AutoClosePastItems::class,
                 \Platform\Inbox\Console\Commands\MaterializeMeetingTimeCommand::class,
                 \Platform\Inbox\Console\Commands\BackfillMeetingSeriesCommand::class,
+                \Platform\Inbox\Console\Commands\CorrelateRecordingsCommand::class,
             ]);
 
             // Schedule registration mirrors what datawarehouse does and what
@@ -101,6 +102,10 @@ class InboxServiceProvider extends ServiceProvider
                 // heute stattgefundenen Termine noch in den Abend-Snapshot einfließen.
                 $schedule->command('inbox:materialize-meeting-time')
                     ->dailyAt('17:45')
+                    ->withoutOverlapping();
+                // Aufnahmen ans Meeting hängen — fängt Out-of-Order-Ankünfte ab.
+                $schedule->command('inbox:correlate-recordings')
+                    ->everyFifteenMinutes()
                     ->withoutOverlapping();
             });
         }

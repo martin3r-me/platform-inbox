@@ -150,6 +150,17 @@ class InboxAudioIngestionService
 
         $this->dispatchDefaultEnrichment($item);
 
+        // Aufnahme ans passende Meeting hängen (Zeit-Overlap). Eindeutiger Treffer
+        // → Auto-Link; 0/>1 → Vorschlags-UI im Meeting-Pane. Soft — nie fatal.
+        try {
+            app(InboxRecordingCorrelator::class)->correlate($item);
+        } catch (\Throwable $e) {
+            \Log::warning('Inbox: recording→meeting correlation failed', [
+                'item_id' => $item->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         return $item;
     }
 
