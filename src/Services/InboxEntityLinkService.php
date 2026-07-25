@@ -163,7 +163,7 @@ class InboxEntityLinkService
      */
     public function linkSiblingsByIcalUid(InboxItem $item, int $entityId): int
     {
-        return $this->applyToSiblings($item, fn (InboxItem $s) => $this->link($s, $entityId));
+        return $this->applyToSiblings($item, fn (InboxItem $s) => $this->link($s, $entityId), 'ical_uid');
     }
 
     /**
@@ -174,18 +174,35 @@ class InboxEntityLinkService
      */
     public function unlinkSiblingsByIcalUid(InboxItem $item, int $entityId): int
     {
-        return $this->applyToSiblings($item, fn (InboxItem $s) => $this->unlink($s, $entityId));
+        return $this->applyToSiblings($item, fn (InboxItem $s) => $this->unlink($s, $entityId), 'ical_uid');
     }
 
-    protected function applyToSiblings(InboxItem $item, callable $fn): int
+    /**
+     * Wie linkSiblingsByIcalUid, aber über die Mail-Thread-Identität
+     * (conversation_id) — der Thread ist die Einheit: eine Mail an den Knoten
+     * hängen → alle Mails desselben Threads docken an.
+     */
+    public function linkSiblingsByConversation(InboxItem $item, int $entityId): int
     {
-        if (!$this->enabled() || empty($item->ical_uid)) {
+        return $this->applyToSiblings($item, fn (InboxItem $s) => $this->link($s, $entityId), 'conversation_id');
+    }
+
+    public function unlinkSiblingsByConversation(InboxItem $item, int $entityId): int
+    {
+        return $this->applyToSiblings($item, fn (InboxItem $s) => $this->unlink($s, $entityId), 'conversation_id');
+    }
+
+    /** Wendet $fn auf alle Geschwister-Items an, die $column mit $item teilen. */
+    protected function applyToSiblings(InboxItem $item, callable $fn, string $column): int
+    {
+        $value = $item->{$column} ?? null;
+        if (!$this->enabled() || !$value) {
             return 0;
         }
 
         $siblings = InboxItem::query()
             ->where('team_id', $item->team_id)
-            ->where('ical_uid', $item->ical_uid)
+            ->where($column, $value)
             ->where('id', '!=', $item->id)
             ->get();
 

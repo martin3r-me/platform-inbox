@@ -161,6 +161,7 @@ class InboxIngestionService
                 'series_master_id' => $session['series_master_id'] ?? null,
                 'ical_uid' => $session['ical_uid'] ?? null,
                 'occurrence_type' => $session['occurrence_type'] ?? null,
+                'conversation_id' => $session['conversation_id'] ?? null,
                 'channel' => $cfg['channel'],
                 'sender_identifier' => $senderIdentifier,
                 'sender_kind' => $cfg['sender_kind'],
@@ -546,6 +547,8 @@ class InboxIngestionService
         // Mail has a separate from_name; everything else doesn't.
         if ($sessionTable === 'user_connector_mail_sessions') {
             $fields[] = 'from_name';
+            // Thread-Identität bis ins Inbox-Item durchreichen (Thread = Einheit).
+            $fields[] = 'conversation_id';
         }
         if ($sessionTable === 'user_connector_meeting_sessions') {
             $fields[] = 'organizer_name';

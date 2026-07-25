@@ -83,6 +83,7 @@ class InboxServiceProvider extends ServiceProvider
                 \Platform\Inbox\Console\Commands\MaterializeMeetingTimeCommand::class,
                 \Platform\Inbox\Console\Commands\BackfillMeetingSeriesCommand::class,
                 \Platform\Inbox\Console\Commands\CorrelateRecordingsCommand::class,
+                \Platform\Inbox\Console\Commands\InheritNodeLinksCommand::class,
             ]);
 
             // Schedule registration mirrors what datawarehouse does and what
@@ -111,6 +112,10 @@ class InboxServiceProvider extends ServiceProvider
                 // Aufnahmen ans Meeting hängen — fängt Out-of-Order-Ankünfte ab.
                 $schedule->command('inbox:correlate-recordings')
                     ->everyFifteenMinutes()
+                    ->withoutOverlapping();
+                // Knoten-Links über Thread/Serie vererben — neue Mails erben den Knoten.
+                $schedule->command('inbox:inherit-node-links')
+                    ->everyTenMinutes()
                     ->withoutOverlapping();
             });
         }

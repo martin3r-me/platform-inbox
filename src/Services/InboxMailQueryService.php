@@ -28,18 +28,41 @@ class InboxMailQueryService implements InboxMailQueryContract
                 $q->whereNull('snoozed_until')->orWhere('snoozed_until', '<=', now());
             })
             ->orderByDesc('received_at')
-            ->limit($limit)
             ->get();
 
-        return $items->map(fn (InboxItem $item) => [
-            'id'              => (int) $item->id,
-            'subject'         => $item->subject ?: '(kein Betreff)',
-            'sender'          => $item->sender_label ?: ($item->sender_identifier ?: 'Unbekannt'),
-            'preview'         => $item->preview,
-            'time'            => $this->timeLabel($item->received_at ? Carbon::parse($item->received_at) : null),
-            'unread'          => $item->status?->value === InboxItemStatus::New->value,
-            'has_attachments' => false, // ohne source in der Liste
-        ])->all();
+        // Nach Thread gruppieren (conversation_id) — der Thread ist die Einheit.
+        // Repräsentant = neueste Mail (Query ist desc → erstes Element der Gruppe).
+        $groups = [];
+        foreach ($items as $item) {
+            $key = $item->conversation_id ?: 'single:' . $item->id;
+            $groups[$key][] = $item;
+        }
+
+        $rows = [];
+        foreach ($groups as $thread) {
+            $rep = $thread[0];
+            $start = $rep->received_at ? Carbon::parse($rep->received_at) : null;
+
+            $rows[] = [
+                'id'              => (int) $rep->id,
+                'subject'         => $rep->subject ?: '(kein Betreff)',
+                'sender'          => $rep->sender_label ?: ($rep->sender_identifier ?: 'Unbekannt'),
+                'preview'         => $rep->preview,
+                'time'            => $this->timeLabel($start),
+                'unread'          => true, // Liste zieht nur 'new' → offene Threads
+                'has_attachments' => false,
+                'thread_count'    => count($thread),
+                '_ts'             => $start ? $start->getTimestamp() : 0,
+            ];
+        }
+
+        usort($rows, fn ($a, $b) => $b['_ts'] <=> $a['_ts']); // neuester Thread zuerst
+        $rows = array_slice($rows, 0, $limit);
+        foreach ($rows as &$r) {
+            unset($r['_ts']);
+        }
+
+        return $rows;
     }
 
     public function detailForItem(int $inboxItemId): ?array
