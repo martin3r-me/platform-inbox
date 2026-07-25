@@ -79,8 +79,19 @@ class InboxEntityLinkService
             ->leftJoin('organization_entity_types as t', 't.id', '=', 'e.entity_type_id')
             ->whereIn('e.id', $entityIds)
             ->whereNull('e.deleted_at')
-            ->get(['e.id', 'e.name', 'e.code', 't.name as type_name'])
+            ->get(['e.id', 'e.name', 'e.code', 'e.parent_entity_id', 'e.team_id', 't.name as type_name'])
             ->keyBy('id');
+
+        // Ahnen-Lookup (team-scoped) für den vollen Pfad je Knoten — so ist am Chip
+        // klar, WELCHER gleichnamige Knoten dranhängt (FOOD.WORKS › Foundation › …).
+        $teamId = optional($entities->first())->team_id;
+        $lookup = $teamId
+            ? DB::table('organization_entities')
+                ->where('team_id', $teamId)
+                ->whereNull('deleted_at')
+                ->get(['id', 'name', 'parent_entity_id'])
+                ->keyBy('id')
+            : collect();
 
         $byItem = [];
         foreach ($links as $link) {
@@ -89,11 +100,22 @@ class InboxEntityLinkService
                 continue;
             }
             $e = $entities[$entityId];
+
+            $path = [];
+            $pid = $e->parent_entity_id;
+            $guard = 0;
+            while ($pid && isset($lookup[$pid]) && $guard++ < 12) {
+                array_unshift($path, $lookup[$pid]->name);
+                $pid = $lookup[$pid]->parent_entity_id;
+            }
+
             $byItem[(int) $link->linkable_id][] = [
                 'id' => (int) $e->id,
                 'name' => $e->name,
                 'type' => $e->type_name,
                 'code' => $e->code,
+                'parent' => $path ? end($path) : null,
+                'path' => $path ? implode(' › ', $path) : null,
             ];
         }
 

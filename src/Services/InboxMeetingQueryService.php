@@ -160,6 +160,7 @@ class InboxMeetingQueryService implements InboxMeetingQueryContract
             ->map(fn ($e) => [
                 'id'    => $e['id'] ?? null,
                 'label' => $e['name'] ?? '—',
+                'path'  => $e['path'] ?? null,
                 'icon'  => 'heroicon-o-share',
             ])
             ->all();
