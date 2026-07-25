@@ -26,26 +26,71 @@ class InboxMeetingQueryService implements InboxMeetingQueryContract
             ->where(function ($q) {
                 $q->whereNull('snoozed_until')->orWhere('snoozed_until', '<=', now());
             })
-            ->orderByDesc('received_at')
+            ->orderBy('received_at')  // aufsteigend: für Serien-Repräsentanten-Wahl
             ->withCount('participants')
-            ->limit($limit)
             ->get();
 
-        return $items->map(function (InboxItem $item) {
-            $start = $item->received_at ? Carbon::parse($item->received_at) : null; // = Termin-Start
+        $today = Carbon::today();
 
-            return [
-                'id'                 => (int) $item->id,
-                'subject'            => $item->subject ?: 'Meeting',
-                'organizer'          => $item->sender_label ?: $item->sender_identifier,
+        // Nach Serie gruppieren: alle Vorkommen einer Serie (series_master_id) → EINE Zeile.
+        // Einzeltermine (kein series_master_id) bilden je eine eigene Gruppe.
+        $groups = [];
+        foreach ($items as $item) {
+            $key = $item->series_master_id
+                ? 'series:' . $item->series_master_id
+                : 'single:' . $item->id;
+            $groups[$key][] = $item;
+        }
+
+        $rows = [];
+        foreach ($groups as $occurrences) {
+            // Repräsentant: nächstes ANSTEHENDES Vorkommen, sonst jüngstes vergangenes.
+            $rep = null;
+            foreach ($occurrences as $o) {
+                $s = $o->received_at ? Carbon::parse($o->received_at) : null;
+                if ($s && $s->gte($today)) {
+                    $rep = $o;
+                    break;
+                }
+            }
+            if (!$rep) {
+                $rep = end($occurrences); // asc sortiert → letztes = jüngstes vergangenes
+            }
+
+            $start = $rep->received_at ? Carbon::parse($rep->received_at) : null;
+            $upcoming = $start && $start->gte($today);
+
+            $rows[] = [
+                'id'                 => (int) $rep->id,
+                'subject'            => $rep->subject ?: 'Meeting',
+                'organizer'          => $rep->sender_label ?: $rep->sender_identifier,
                 'when'               => $this->whenLabel($start),
                 'time_short'         => $start ? $start->format('H:i') : '',
-                'participants_count' => (int) ($item->participants_count ?? 0),
-                'is_online'          => false,
-                'is_recurring'       => $item->series_master_id !== null,
-                'unread'             => $item->status?->value === InboxItemStatus::New->value,
+                'participants_count' => (int) ($rep->participants_count ?? 0),
+                'is_series'          => $rep->series_master_id !== null,
+                'series_count'       => count($occurrences),
+                'section'            => $upcoming ? 'upcoming' : 'past',
+                'unread'             => $rep->status?->value === InboxItemStatus::New->value,
+                '_ts'                => $start ? $start->getTimestamp() : 0,
             ];
-        })->all();
+        }
+
+        // Anstehend (aufsteigend, nächster zuerst) VOR Vergangen (absteigend, jüngster zuerst).
+        usort($rows, function ($a, $b) {
+            if ($a['section'] !== $b['section']) {
+                return $a['section'] === 'upcoming' ? -1 : 1;
+            }
+            return $a['section'] === 'upcoming'
+                ? $a['_ts'] <=> $b['_ts']
+                : $b['_ts'] <=> $a['_ts'];
+        });
+
+        $rows = array_slice($rows, 0, max($limit, 50));
+        foreach ($rows as &$r) {
+            unset($r['_ts']);
+        }
+
+        return $rows;
     }
 
     public function detailForItem(int $inboxItemId): ?array
@@ -85,7 +130,13 @@ class InboxMeetingQueryService implements InboxMeetingQueryContract
             'participants'  => $participants,
             'agenda'        => $this->splitLines(($s->body_preview ?? null) ?: ($item->body ?? $item->preview ?? null)),
             'join_url'      => $s->online_meeting_url ?? null,
-            'is_recurring'  => $item->series_master_id !== null,
+            'is_series'     => $item->series_master_id !== null,
+            'series_count'  => $item->series_master_id
+                ? InboxItem::where('user_id', $item->user_id)
+                    ->where('series_master_id', $item->series_master_id)
+                    ->where('status', InboxItemStatus::New->value)
+                    ->count()
+                : 1,
             'meeting_id'    => $item->meeting_id,   // gesetzt = zu echtem Meeting promotet (Inbox-Feld)
             'recording'     => $this->recording($item),
             'context'       => $this->entities($item),
