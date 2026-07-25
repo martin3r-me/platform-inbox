@@ -144,21 +144,27 @@ class InboxEntityLinkService
 
         return DB::table('organization_entities as e')
             ->leftJoin('organization_entity_types as t', 't.id', '=', 'e.entity_type_id')
+            ->leftJoin('organization_entities as p', 'p.id', '=', 'e.parent_entity_id')
             ->where('e.team_id', $teamId)
             ->whereNull('e.deleted_at')
             ->where('e.is_active', true)
             ->where(function ($qq) use ($like) {
+                // Name, Code ODER Eltern-Knoten — so findet z. B. "FOOD.WORKS" auch
+                // dessen Kinder (etwa den gleichnamigen "Foundation"-Container).
                 $qq->where('e.name', 'like', $like)
-                    ->orWhere('e.code', 'like', $like);
+                    ->orWhere('e.code', 'like', $like)
+                    ->orWhere('p.name', 'like', $like);
             })
+            ->orderBy('p.name')
             ->orderBy('e.name')
             ->limit($limit)
-            ->get(['e.id', 'e.name', 'e.code', 't.name as type_name'])
+            ->get(['e.id', 'e.name', 'e.code', 't.name as type_name', 'p.name as parent_name'])
             ->map(fn ($r) => [
                 'id' => (int) $r->id,
                 'name' => $r->name,
                 'code' => $r->code,
                 'type' => $r->type_name,
+                'parent' => $r->parent_name,
             ])
             ->all();
     }
