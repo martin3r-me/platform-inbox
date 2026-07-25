@@ -84,6 +84,7 @@ class InboxServiceProvider extends ServiceProvider
                 \Platform\Inbox\Console\Commands\BackfillMeetingSeriesCommand::class,
                 \Platform\Inbox\Console\Commands\CorrelateRecordingsCommand::class,
                 \Platform\Inbox\Console\Commands\InheritNodeLinksCommand::class,
+                \Platform\Inbox\Console\Commands\BackfillIdentityCommand::class,
             ]);
 
             // Schedule registration mirrors what datawarehouse does and what
@@ -116,6 +117,11 @@ class InboxServiceProvider extends ServiceProvider
                 // Knoten-Links über Thread/Serie vererben — neue Mails erben den Knoten.
                 $schedule->command('inbox:inherit-node-links')
                     ->everyTenMinutes()
+                    ->withoutOverlapping();
+                // Gruppen-Identität (conversation_id/ical_uid) von Sessions auf Items
+                // nachziehen — Altdaten-Catch-up, idempotent.
+                $schedule->command('inbox:backfill-identity')
+                    ->hourly()
                     ->withoutOverlapping();
             });
         }
