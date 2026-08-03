@@ -3,20 +3,18 @@
 namespace Platform\Inbox\Organization;
 
 use Illuminate\Database\Eloquent\Builder;
-use Platform\Inbox\Models\InboxItem;
 use Platform\Organization\Contracts\EntityLinkProvider;
 
 /**
- * Macht am Knoten verlinkte Inbox-Items (morph `inbox_item`) zu einem
- * Zeit-Kontext für den EntityTimeResolver.
+ * Historisch (Phase A): machte am Knoten verlinkte Inbox-Items (morph `inbox_item`)
+ * zum Zeit-Kontext, damit Meeting-Zeit mit context_type = InboxItem::class am Knoten
+ * aufläuft.
  *
- * Zweck (Phase A): Meeting-Zeit, die MaterializeMeetingTimeCommand als echte
- * OrganizationTimeEntry mit context_type = InboxItem::class bucht, läuft dadurch
- * am Knoten in die Ist-Zeiten (time_total_minutes) auf.
- *
- * Bewusst minimal: liefert NUR die timeTrackableCascade. morphAliases() ist leer,
- * damit inbox_item KEIN Metrik-/Display-Provider wird (metrics/activityChildren
- * bleiben unangetastet) — es geht ausschließlich um die Zeit-Auflösung.
+ * Ab Phase C bucht MaterializeMeetingTimeCommand die Ist-Zeit direkt auf das
+ * MEETING (context_type = Meeting::class), nicht mehr aufs Inbox-Item — das Meeting
+ * ist der fachliche Kontext (Titel, Agenda) statt eines Infrastruktur-Objekts.
+ * timeTrackableCascades() ist daher jetzt LEER, sonst würde derselbe Termin über
+ * zwei Knoten-Links (inbox_item UND meeting) doppelt gezählt.
  */
 class InboxEntityLinkProvider implements EntityLinkProvider
 {
@@ -46,15 +44,12 @@ class InboxEntityLinkProvider implements EntityLinkProvider
     }
 
     /**
-     * inbox_item → InboxItem, keine Child-Relations.
-     * Eine TimeEntry mit context_type = InboxItem::class + context_id = inbox_item.id
-     * wird damit der Entity zugerechnet, an der das Inbox-Item hängt.
+     * Leer: Die Meeting-Ist-Zeit hängt ab Phase C am Meeting (morph `meeting`),
+     * nicht mehr am Inbox-Item — siehe MeetingsEntityLinkProvider.
      */
     public function timeTrackableCascades(): array
     {
-        return [
-            'inbox_item' => [InboxItem::class, []],
-        ];
+        return [];
     }
 
     public function metrics(string $morphAlias, array $linksByEntity): array
