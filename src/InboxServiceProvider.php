@@ -144,10 +144,22 @@ class InboxServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        Relation::morphMap([
+        $morphMap = [
             'inbox_item' => InboxItem::class,
             'inbox_sender_subscription' => InboxSenderSubscription::class,
-        ]);
+        ];
+
+        // source_type der Meeting-Items ist der Alias 'user_connector_meeting_session'
+        // (bei der Ingestion gesetzt). Ist die Morph-Map erzwungen, muss der Alias
+        // aufgelöst werden können, sonst wirft $item->source (morphTo) beim Laden
+        // "Class user_connector_meeting_session not found". Der Alias gehört dem
+        // UserConnectors-Modul; wir registrieren ihn defensiv mit, wo die Klasse da
+        // ist (soft-coupled — fehlt das Modul, bleibt der Eintrag weg).
+        if (class_exists(\Platform\UserConnectors\Models\UserConnectorMeetingSession::class)) {
+            $morphMap['user_connector_meeting_session'] = \Platform\UserConnectors\Models\UserConnectorMeetingSession::class;
+        }
+
+        Relation::morphMap($morphMap);
 
         // Am Knoten verlinkte Inbox-Items als Zeit-Kontext registrieren, damit
         // gebuchte Meeting-Zeit (MaterializeMeetingTimeCommand) in die Ist-Zeiten
