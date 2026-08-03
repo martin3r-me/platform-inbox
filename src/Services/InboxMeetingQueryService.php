@@ -3,6 +3,8 @@
 namespace Platform\Inbox\Services;
 
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Platform\Inbox\Contracts\InboxMeetingQueryContract;
 use Platform\Inbox\Enums\Channel;
 use Platform\Inbox\Enums\InboxItemStatus;
@@ -141,11 +143,58 @@ class InboxMeetingQueryService implements InboxMeetingQueryContract
             'join_url'      => $s->online_meeting_url ?? null,
             'is_series'     => $item->series_master_id !== null || $seriesCount > 1,
             'series_count'  => $seriesCount,
-            'meeting_id'    => $item->meeting_id,   // gesetzt = zu echtem Meeting promotet (Inbox-Feld)
+            'meeting_id'    => $this->resolveMeetingId($item),   // geteilte Termin-Identität, nicht nur die eigene Spalte
             'recording'     => $this->recording($item),
             'context'       => $this->entities($item),
             'related'       => null,
         ];
+    }
+
+    /**
+     * Meeting-Identität zur LESEZEIT auflösen — nicht nur die eigene Spalte lesen.
+     *
+     * Warum: promoteInboxItem() schreibt meeting_id nur auf die Items des Promoters
+     * (user-scoped Backlink). Ein zweiter Teilnehmer B hat DASSELBE reale Meeting
+     * (gleiche iCalUId) in seinem Eingang, aber ohne gesetztes meeting_id — er sähe
+     * sonst weiter „Zu Meeting machen" und würde ein zweites Mal promoten wollen.
+     * Wir lösen daher über die geteilte Termin-Identität (iCalUId + Tag) gegen
+     * meetings_meetings auf: sobald IRGENDWER promotet hat, kippt das Item bei ALLEN
+     * Beteiligten auf „Echtes Meeting". Der Kontext bleibt der des Ersten, kein
+     * Doppel-Meeting (promoteSingle/Series sind find-or-create per iCalUId).
+     *
+     * Soft-coupled: liest die meetings-Tabelle defensiv via DB::table (keine harte
+     * Abhängigkeit auf das meetings-Modul; fehlt es, greift der Null-Zweig).
+     */
+    protected function resolveMeetingId(InboxItem $item): ?int
+    {
+        // Schnellpfad: eigener Backlink (der Promoter selbst) ist schon gesetzt.
+        if ($item->meeting_id) {
+            return (int) $item->meeting_id;
+        }
+
+        $icalUid = $item->ical_uid ?: null;
+        if (
+            !$icalUid
+            || !Schema::hasTable('meetings_meetings')
+            || !Schema::hasColumn('meetings_meetings', 'ical_uid')
+        ) {
+            return null;
+        }
+
+        $query = DB::table('meetings_meetings')
+            ->where('ical_uid', $icalUid)
+            ->whereNull('deleted_at');
+
+        // Serie: mehrere Meetings teilen die iCalUId (eins je Vorkommen). Das
+        // Vorkommen DIESES Tages wählen, damit „In Meetings öffnen" korrekt trifft.
+        $start = $item->received_at ? Carbon::parse($item->received_at) : null;
+        if ($start) {
+            $query->whereDate('start_date', $start->toDateString());
+        }
+
+        $id = $query->orderBy('id')->value('id');
+
+        return $id ? (int) $id : null;
     }
 
     protected function entities(InboxItem $item): array
