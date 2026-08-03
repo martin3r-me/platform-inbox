@@ -4,9 +4,11 @@ namespace Platform\Inbox\Console\Commands;
 
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Platform\Inbox\Enums\Channel;
 use Platform\Inbox\Models\InboxItem;
+use Platform\Inbox\Services\InboxEntityLinkService;
 use Platform\Organization\Models\OrganizationTimeEntry;
 use Platform\Organization\Services\EntityDimensionBridge;
 use Platform\UserConnectors\Models\UserConnectorMeetingSession;
@@ -103,6 +105,24 @@ class MaterializeMeetingTimeCommand extends Command
             ->unique()
             ->flip();
 
+        // Für --dry-run: Ziel-Knoten je Item + Nutzernamen auflösen, damit sichtbar
+        // wird, WAS wohin gebucht würde (die TimeEntry hängt am InboxItem und läuft
+        // über den EntityTimeResolver auf diesen Knoten auf).
+        $nodesByItem = [];
+        $userNames = [];
+        if ($dryRun) {
+            try {
+                $nodesByItem = app(InboxEntityLinkService::class)->linksForItems($itemIds);
+            } catch (\Throwable $e) {
+                $nodesByItem = [];
+            }
+            $userNames = DB::table('users')
+                ->whereIn('id', $items->pluck('user_id')->unique()->all())
+                ->pluck('name', 'id')
+                ->all();
+        }
+
+        $plan = [];
         $created = 0;
         $skippedUnlinked = 0;
         $skippedExisting = 0;
@@ -120,6 +140,21 @@ class MaterializeMeetingTimeCommand extends Command
 
             $session = $item->source;
             $minutes = $this->minutesFor($session);
+
+            if ($dryRun) {
+                $nodes = collect($nodesByItem[$item->id] ?? [])
+                    ->map(fn ($n) => ($n['path'] ?? null) ? $n['path'] . ' › ' . $n['name'] : ($n['name'] ?? '—'))
+                    ->implode(', ');
+                $plan[] = sprintf(
+                    '  • %s — %d Min — %s — %s (#%d) → %s',
+                    $session->subject ?: ($item->subject ?: 'Meeting'),
+                    $minutes,
+                    $session->start_at->toDateString(),
+                    $userNames[$item->user_id] ?? 'User',
+                    $item->user_id,
+                    $nodes !== '' ? $nodes : '—',
+                );
+            }
 
             if (! $dryRun) {
                 OrganizationTimeEntry::create([
@@ -140,6 +175,13 @@ class MaterializeMeetingTimeCommand extends Command
             }
 
             $created++;
+        }
+
+        if ($dryRun && ! empty($plan)) {
+            $this->line('[dry-run] Würde buchen (Termin — Dauer — Datum — Person → Knoten):');
+            foreach ($plan as $line) {
+                $this->line($line);
+            }
         }
 
         $this->info(sprintf(
