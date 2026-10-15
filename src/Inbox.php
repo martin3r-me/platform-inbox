@@ -2,34 +2,29 @@
 
 namespace Platform\Inbox;
 
-use Platform\Inbox\Contracts\InboxDelivery;
+use Platform\Core\Inbox\Inbox as CoreInbox;
 use Platform\Inbox\Models\InboxItem;
 
 /**
- * Bequeme statische Kurzform für den Push-Kontrakt.
+ * Rückwärtskompatibler SHIM (Phase 0 des Umbaus).
  *
- * Andere Module (helpdesk, planner, …) liefern so in die Inbox:
+ * Diese alte Kurzform bleibt bestehen, damit Produzenten (helpdesk, planner, …),
+ * die noch \Platform\Inbox\Inbox::deliver([...]) rufen, NICHT brechen — auch nicht,
+ * wenn der Triage-Kern in Phase 1 nach Core umzieht. Intern delegiert sie jetzt an
+ * die neue Core-Naht \Platform\Core\Inbox\Inbox und lädt zur Wahrung der alten
+ * Signatur (?InboxItem) das Model über die zurückgegebene ID nach.
  *
- *   if (class_exists(\Platform\Inbox\Inbox::class)) {
- *       \Platform\Inbox\Inbox::deliver([
- *           'user_id'      => $ticket->assignee_id,
- *           'team_id'      => $ticket->team_id,
- *           'subject'      => 'Ticket dir zugewiesen: ' . $ticket->title,
- *           'body'         => $ticket->description,
- *           'source'       => $ticket,
- *           'sender_label' => 'Helpdesk',
- *       ]);
- *   }
- *
- * class_exists-Guard = Soft-Coupling: läuft auch ohne installiertes Inbox-Modul.
+ * Neue Aufrufer sollen direkt \Platform\Core\Inbox\Inbox::deliver() nutzen (gibt ?int).
  */
 class Inbox
 {
     /**
-     * @param  array<string,mixed>  $payload  siehe InboxDelivery::deliver()
+     * @param  array<string,mixed>  $payload  siehe \Platform\Core\Inbox\Contracts\Delivery
      */
     public static function deliver(array $payload): ?InboxItem
     {
-        return app(InboxDelivery::class)->deliver($payload);
+        $id = CoreInbox::deliver($payload);
+
+        return $id !== null ? InboxItem::find($id) : null;
     }
 }
