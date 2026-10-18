@@ -43,16 +43,6 @@ class InboxServiceProvider extends ServiceProvider
             \Platform\Inbox\Services\InboxDeliveryService::class
         );
 
-        // Phase-0-Umbau: die neue Core-Delivery-Naht auf die bestehende inbox-interne
-        // Implementierung brücken (CoreDeliveryBridge mappt ?InboxItem → ?int). Damit
-        // können Produzenten schon auf \Platform\Core\Inbox\Inbox::deliver() umziehen,
-        // während der Kern noch hier lebt. Zieht der Kern nach Core (Phase 1), bindet
-        // Core den Port direkt und diese Zeile + die Bridge fallen weg.
-        $this->app->bind(
-            \Platform\Core\Inbox\Contracts\Delivery::class,
-            \Platform\Inbox\Support\CoreDeliveryBridge::class
-        );
-
         // Query-Kontrakt Meeting-Kanal: home rendert damit den Reading-Pane.
         $this->app->bind(
             \Platform\Inbox\Contracts\InboxMeetingQueryContract::class,
