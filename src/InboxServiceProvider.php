@@ -55,6 +55,13 @@ class InboxServiceProvider extends ServiceProvider
             \Platform\Inbox\Services\ItemLinkingService::class
         );
 
+        // Aufnahme-Ingestion-Naht: Produzenten (whisper) liefern über Core, die
+        // Materialisierung bleibt hier (InboxAudioIngestionService).
+        $this->app->bind(
+            \Platform\Core\Inbox\Contracts\RecordingIngestion::class,
+            \Platform\Inbox\Services\RecordingIngestionService::class
+        );
+
         // Push-Kontrakt: interne Ereignisse anderer Module in die Inbox liefern.
         // Kurzform: \Platform\Inbox\Inbox::deliver([...]).
         $this->app->bind(
