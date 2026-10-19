@@ -72,6 +72,7 @@ class SyncTool implements ToolContract, ToolMetadataContract
                     ],
                 ],
                 'language' => ['type' => 'string', 'description' => 'Optional: ISO-Sprachcode. Default: "de".'],
+                'force' => ['type' => 'boolean', 'description' => 'Optional: true ersetzt einen bestehenden Import desselben file_id (statt Dedup-Return) — für Re-Sync nach fehlerhaftem/teilweisem Import.'],
             ],
             'required' => ['file_id', 'title', 'note_content', 'segments', 'metadata'],
         ];
@@ -92,23 +93,30 @@ class SyncTool implements ToolContract, ToolMetadataContract
         $noteContent = (string) ($arguments['note_content'] ?? '');
         $segments = $arguments['segments'] ?? [];
         $metadata = $arguments['metadata'] ?? [];
+        $force = (bool) ($arguments['force'] ?? false);
 
         if ($fileId === '' || $title === '' || empty($segments)) {
             return ToolResult::error('VALIDATION_ERROR', 'file_id, title und segments sind erforderlich.');
         }
 
-        // Idempotency: re-sync of the same Plaud file returns the existing item.
+        // Idempotency: re-sync of the same Plaud file returns the existing item —
+        // außer force=true, dann wird der bestehende (ggf. fehlerhafte/teilweise)
+        // Import ERSETZT: Platzhalter-Item samt Kindern + Dedup-Zeile entfernen,
+        // danach fällt der normale Import durch (kein Sackgassen-Dedup mehr).
         $existing = InboxPlaudImport::query()
             ->where('team_id', $teamId)
             ->where('plaud_file_id', $fileId)
             ->first();
         if ($existing) {
-            return ToolResult::success([
-                'inbox_item_id' => $existing->inbox_item_id,
-                'plaud_file_id' => $fileId,
-                'duplicate' => true,
-                'message' => "Bereits importiert als Inbox-Item #{$existing->inbox_item_id}.",
-            ]);
+            if (!$force) {
+                return ToolResult::success([
+                    'inbox_item_id' => $existing->inbox_item_id,
+                    'plaud_file_id' => $fileId,
+                    'duplicate' => true,
+                    'message' => "Bereits importiert als Inbox-Item #{$existing->inbox_item_id}. (force=true zum Ersetzen)",
+                ]);
+            }
+            $this->purgeExistingImport($existing);
         }
 
         // Parse the Plaud note + build the standard audio payload.
@@ -270,10 +278,30 @@ class SyncTool implements ToolContract, ToolMetadataContract
             return null;
         }
         try {
-            return Carbon::parse($value);
+            // Plaud-Timestamps sind UTC. Naive Strings ohne Offset MÜSSEN als UTC
+            // interpretiert werden — sonst landet received_at in der lokalen TZ
+            // (z.B. 2h daneben) und der Zeit-Überlappungs-Korrelator verfehlt den Termin.
+            return Carbon::parse($value, 'UTC');
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * force-Re-Sync: bestehenden Plaud-Import ersetzen — Platzhalter-Item samt
+     * Kindern (Enrichments/Participants/Segments) und die Dedup-Zeile entfernen,
+     * damit der folgende Import sauber neu anlegt (keine Sackgasse durch Teil-Importe).
+     */
+    protected function purgeExistingImport(InboxPlaudImport $import): void
+    {
+        $oldId = (int) $import->inbox_item_id;
+        if ($oldId) {
+            InboxItemEnrichment::where('inbox_item_id', $oldId)->delete();
+            \Platform\Inbox\Models\InboxItemParticipant::where('inbox_item_id', $oldId)->delete();
+            \Platform\Inbox\Models\InboxItemSegment::where('inbox_item_id', $oldId)->delete();
+            InboxItem::where('id', $oldId)->delete();
+        }
+        $import->delete();
     }
 
     protected function storeVendorEnrichment(InboxItem $item, array $parsed): void
