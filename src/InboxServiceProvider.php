@@ -36,6 +36,13 @@ class InboxServiceProvider extends ServiceProvider
             \Platform\Inbox\Services\InboxItemLinkService::class
         );
 
+        // Link-Naht des Kerns: der UnitResolver fragt hierüber, welche Items via
+        // Link zur selben Einheit gehören. Überschreibt Cores NullItemRelations.
+        $this->app->bind(
+            \Platform\Core\Inbox\Contracts\ItemRelations::class,
+            \Platform\Inbox\Services\ItemRelationsService::class
+        );
+
         // Push-Kontrakt: interne Ereignisse anderer Module in die Inbox liefern.
         // Kurzform: \Platform\Inbox\Inbox::deliver([...]).
         $this->app->bind(
