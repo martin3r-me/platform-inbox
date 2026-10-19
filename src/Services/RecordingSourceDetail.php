@@ -7,8 +7,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Platform\Core\Inbox\Contracts\SourceDetail;
 use Platform\Inbox\Enums\InboxItemRelation;
+use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxItemEnrichment;
 use Platform\Inbox\Services\InboxItemLinkService;
+use Platform\Inbox\Services\InboxRecordingCorrelator;
 
 /**
  * Live-Detail für den Aufnahme-Kanal: Transkript-Segmente + Dauer + KI-Anreicherung
@@ -70,7 +72,7 @@ class RecordingSourceDetail implements SourceDetail
             'channel_label' => 'Aufnahme',
             'duration'      => $this->fmt((int) ($item->audio_duration_seconds ?? 0)),
             'segments'      => $segments,
-        ], $this->enrichment($inboxItemId), $this->linkedMeeting($inboxItemId));
+        ], $this->enrichment($inboxItemId), $this->meetingSection($inboxItemId));
     }
 
     /**
@@ -117,14 +119,15 @@ class RecordingSourceDetail implements SourceDetail
     }
 
     /**
-     * Der zugeordnete Termin: der Correlator legt bei eindeutigem Zeit-Overlap
-     * einen supplements-Link (Aufnahme → Meeting) an. Für den Pane „gehört zu …".
+     * Termin-Zuordnung: ist die Aufnahme verknüpft (supplements-Link), liefert
+     * sie `linked_meeting`; sonst `meeting_suggestions` (zeitlich passende Termine
+     * aus dem Correlator) für die „Gehört das hierher?"-UI im Pane.
      *
      * @return array<string,mixed>
      */
-    protected function linkedMeeting(int $inboxItemId): array
+    protected function meetingSection(int $inboxItemId): array
     {
-        if (! class_exists(InboxItemLinkService::class) || ! Schema::hasTable('inbox_item_links')) {
+        if (! Schema::hasTable('inbox_item_links')) {
             return [];
         }
 
@@ -132,26 +135,38 @@ class RecordingSourceDetail implements SourceDetail
             $link = app(InboxItemLinkService::class)
                 ->outgoing($inboxItemId, InboxItemRelation::Supplements)
                 ->first();
+
+            if ($link) {
+                $meeting = DB::table('inbox_items')->where('id', $link->to_inbox_item_id)->first();
+                if ($meeting) {
+                    return ['linked_meeting' => [
+                        'inbox_id' => (int) $meeting->id,
+                        'subject'  => $meeting->subject ?? 'Termin',
+                        'time'     => $this->when($meeting->received_at ?? null),
+                        'auto'     => (bool) (is_array($link->meta) ? ($link->meta['auto'] ?? false) : false),
+                    ]];
+                }
+            }
+
+            // Nicht verknüpft → Vorschläge (zeitlich passende Meetings/Calls).
+            $recording = InboxItem::find($inboxItemId);
+            if (! $recording) {
+                return [];
+            }
+            $suggestions = app(InboxRecordingCorrelator::class)
+                ->candidatesFor($recording)
+                ->map(fn ($m) => [
+                    'inbox_id' => (int) $m->id,
+                    'subject'  => $m->subject ?? 'Termin',
+                    'time'     => $this->when($m->received_at ?? null),
+                ])
+                ->values()
+                ->all();
+
+            return ['meeting_suggestions' => $suggestions];
         } catch (\Throwable) {
             return [];
         }
-        if (! $link) {
-            return [];
-        }
-
-        $meeting = DB::table('inbox_items')->where('id', $link->to_inbox_item_id)->first();
-        if (! $meeting) {
-            return [];
-        }
-
-        return [
-            'linked_meeting' => [
-                'inbox_id' => (int) $meeting->id,
-                'subject'  => $meeting->subject ?? 'Termin',
-                'time'     => $this->when($meeting->received_at ?? null),
-                'auto'     => (bool) (is_array($link->meta) ? ($link->meta['auto'] ?? false) : false),
-            ],
-        ];
     }
 
     protected function when(mixed $v): string

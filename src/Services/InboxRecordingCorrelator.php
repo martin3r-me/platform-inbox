@@ -56,6 +56,58 @@ class InboxRecordingCorrelator
     }
 
     /**
+     * Manuelle Zuordnung: Aufnahme an genau EIN Meeting hängen (ersetzt eine
+     * bestehende Zuordnung — single assignment). Reicht die Org-Baum-Verknüpfungen
+     * des Meetings an die Aufnahme durch, damit Transkript und gebuchte Zeit am
+     * selben Kontext landen.
+     */
+    public function assignToMeeting(int $recordingId, int $meetingId): void
+    {
+        $this->clearAssignment($recordingId);
+        $this->links->supplements(
+            supplementaryItemId: $recordingId,
+            primaryItemId: $meetingId,
+            meta: ['matched_by' => 'manual', 'auto' => false],
+        );
+        $this->cascadeOrgLinks($meetingId, $recordingId);
+    }
+
+    /** Alle supplements-Zuordnungen der Aufnahme lösen. */
+    public function clearAssignment(int $recordingId): void
+    {
+        foreach ($this->links->outgoing($recordingId, InboxItemRelation::Supplements) as $link) {
+            $this->links->unlink($recordingId, (int) $link->to_inbox_item_id, InboxItemRelation::Supplements);
+        }
+    }
+
+    /**
+     * Die Org-Dimension-Verknüpfungen des Meetings auf die Aufnahme kopieren
+     * (Durchreichen in den Org-Baum). Soft-gekoppelt: ohne Organization-Modul No-op.
+     * Idempotent — DimensionLinkService::link überschreibt/dedupt selbst.
+     */
+    protected function cascadeOrgLinks(int $meetingId, int $recordingId): void
+    {
+        $svcClass = \Platform\Organization\Services\DimensionLinkService::class;
+        if (! class_exists($svcClass)) {
+            return;
+        }
+
+        try {
+            $svc = app($svcClass);
+            foreach (array_keys($svcClass::getDimensions()) as $dimension) {
+                foreach ($svc->getLinked($dimension, 'inbox_item', $meetingId) as $row) {
+                    $valueId = (int) ($row['dim_value_id'] ?? $row['id'] ?? 0);
+                    if ($valueId > 0) {
+                        $svc->link($dimension, 'inbox_item', $recordingId, $valueId, ['via' => 'recording_meeting_cascade']);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Organization-Modul nicht geladen / Dimension nicht verfügbar — egal.
+        }
+    }
+
+    /**
      * Alle Meeting-Items (gleicher User), deren Fenster mit der Aufnahme überlappt.
      * Dient dem Auto-Link (genau 1) UND der Vorschlags-UI (>1 / für ein Meeting).
      *
