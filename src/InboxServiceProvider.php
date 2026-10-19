@@ -211,6 +211,12 @@ class InboxServiceProvider extends ServiceProvider
                     }
                 }
             }
+
+            // LinkRule-Fabrik: Aufnahme↔Meeting als pluggbare Regel registrieren.
+            if (class_exists(\Platform\Core\Inbox\Support\LinkRuleRegistry::class)) {
+                resolve(\Platform\Core\Inbox\Support\LinkRuleRegistry::class)
+                    ->register(new \Platform\Inbox\LinkRules\RecordingMeetingLinkRule());
+            }
         } catch (\Throwable $e) {
             // Core-Inbox-Engine nicht geladen.
         }

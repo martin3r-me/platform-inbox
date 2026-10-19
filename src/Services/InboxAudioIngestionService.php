@@ -150,12 +150,14 @@ class InboxAudioIngestionService
 
         $this->dispatchDefaultEnrichment($item);
 
-        // Aufnahme ans passende Meeting hängen (Zeit-Overlap). Eindeutiger Treffer
-        // → Auto-Link; 0/>1 → Vorschlags-UI im Meeting-Pane. Soft — nie fatal.
+        // Verknüpfungs-Regeln (Aufnahme↔Meeting per Zeit-Overlap u.a.) über die
+        // pluggbare LinkRule-Fabrik. Dieselbe Fabrik läuft auf ItemDelivered für
+        // Core-gelieferte Items; hier inline, weil Aufnahmen über den eigenen
+        // Ingest kommen. Regeln sind idempotent → kein Doppellauf. Soft — nie fatal.
         try {
-            app(InboxRecordingCorrelator::class)->correlate($item);
+            app(\Platform\Core\Inbox\Support\LinkRuleRunner::class)->run((int) $item->id);
         } catch (\Throwable $e) {
-            \Log::warning('Inbox: recording→meeting correlation failed', [
+            \Log::warning('Inbox: link rules failed', [
                 'item_id' => $item->id,
                 'error' => $e->getMessage(),
             ]);
