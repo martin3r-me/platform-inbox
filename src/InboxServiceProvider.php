@@ -173,6 +173,19 @@ class InboxServiceProvider extends ServiceProvider
             // Organization-Modul nicht geladen — Meeting-Zeit aggregiert dann nicht.
         }
 
+        // Aufnahme-Detail (Transkript-Segmente + Dauer) für den Core-Stream.
+        // Core\StreamQuery::detailForItem merged das für channel='recording', damit
+        // der Reading-Pane (z.B. in home) die Segmente bekommt. Soft: ohne Core-
+        // Registry ein No-op.
+        try {
+            if (class_exists(\Platform\Core\Inbox\Support\SourceDetailRegistry::class)) {
+                resolve(\Platform\Core\Inbox\Support\SourceDetailRegistry::class)
+                    ->register(new \Platform\Inbox\Services\RecordingSourceDetail());
+            }
+        } catch (\Throwable $e) {
+            // Core-Inbox-Engine nicht geladen.
+        }
+
         if (
             config()->has('inbox.routing') &&
             config()->has('inbox.navigation') &&
