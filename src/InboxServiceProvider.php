@@ -43,6 +43,18 @@ class InboxServiceProvider extends ServiceProvider
             \Platform\Inbox\Services\ItemRelationsService::class
         );
 
+        // Handoff-Naht des Kerns: Item → Aufgabe/Ticket. Überschreibt NullItemHandoff.
+        $this->app->bind(
+            \Platform\Core\Inbox\Contracts\ItemHandoff::class,
+            \Platform\Inbox\Services\ItemHandoffService::class
+        );
+
+        // Zuordnungs-Naht des Kerns: manuelle Aufnahme→Termin-Zuordnung.
+        $this->app->bind(
+            \Platform\Core\Inbox\Contracts\ItemLinking::class,
+            \Platform\Inbox\Services\ItemLinkingService::class
+        );
+
         // Push-Kontrakt: interne Ereignisse anderer Module in die Inbox liefern.
         // Kurzform: \Platform\Inbox\Inbox::deliver([...]).
         $this->app->bind(
