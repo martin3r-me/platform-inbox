@@ -173,17 +173,6 @@ class InboxServiceProvider extends ServiceProvider
             // Organization-Modul nicht geladen — Meeting-Zeit aggregiert dann nicht.
         }
 
-        // Flow-Automation: Aufnahme landet → sofort zum Termin korrelieren (smooth
-        // Transkript→Termin, event-getrieben statt 15-Min-Cron). Soft-gekoppelt.
-        try {
-            if (class_exists(\Platform\Core\Flow\Support\AutomationRegistry::class)) {
-                resolve(\Platform\Core\Flow\Support\AutomationRegistry::class)
-                    ->register(new \Platform\Inbox\Flow\CorrelateRecordingAutomation());
-            }
-        } catch (\Throwable $e) {
-            // Core-Flow nicht geladen
-        }
-
         if (
             config()->has('inbox.routing') &&
             config()->has('inbox.navigation') &&
