@@ -186,8 +186,21 @@ class InboxServiceProvider extends ServiceProvider
         // Registry ein No-op.
         try {
             if (class_exists(\Platform\Core\Inbox\Support\SourceDetailRegistry::class)) {
-                resolve(\Platform\Core\Inbox\Support\SourceDetailRegistry::class)
-                    ->register(new \Platform\Inbox\Services\RecordingSourceDetail());
+                $sourceDetails = resolve(\Platform\Core\Inbox\Support\SourceDetailRegistry::class);
+                $sourceDetails->register(new \Platform\Inbox\Services\RecordingSourceDetail());
+
+                // Detail-Naht der übrigen Kanäle über Adapter an die bestehenden
+                // QueryServices — home liest damit JEDES Kanal-Detail über die EINE
+                // Core-InboxQuery, nicht mehr über 5 Inbox*QueryContracts.
+                foreach ([
+                    'meeting' => \Platform\Inbox\Contracts\InboxMeetingQueryContract::class,
+                    'mail'    => \Platform\Inbox\Contracts\InboxMailQueryContract::class,
+                    'call'    => \Platform\Inbox\Contracts\InboxCallQueryContract::class,
+                    'task'    => \Platform\Inbox\Contracts\InboxTaskQueryContract::class,
+                    'ticket'  => \Platform\Inbox\Contracts\InboxTicketQueryContract::class,
+                ] as $channel => $contract) {
+                    $sourceDetails->register(new \Platform\Inbox\Services\DelegatingSourceDetail($channel, $contract));
+                }
             }
         } catch (\Throwable $e) {
             // Core-Inbox-Engine nicht geladen.
