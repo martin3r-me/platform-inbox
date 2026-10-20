@@ -4,7 +4,6 @@ namespace Platform\Inbox;
 
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
@@ -234,7 +233,7 @@ class InboxServiceProvider extends ServiceProvider
         if (
             config()->has('inbox.routing') &&
             config()->has('inbox.navigation') &&
-            Schema::hasTable('modules')
+            PlatformCore::modulesTableExists()
         ) {
             PlatformCore::registerModule([
                 'key'        => 'inbox',
