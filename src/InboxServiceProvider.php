@@ -14,9 +14,8 @@ use Platform\Inbox\Console\Commands\IngestInboxCommand;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxSenderSubscription;
 use Platform\Inbox\Services\ChannelRouter;
-use Platform\Inbox\Services\Enrichment\ClaudeEnrichmentProvider;
 use Platform\Inbox\Services\Enrichment\EnrichmentProviderRegistry;
-use Platform\Inbox\Services\Enrichment\OpenAiEnrichmentProvider;
+use Platform\Inbox\Services\Enrichment\GatewayEnrichmentProvider;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 
@@ -97,20 +96,12 @@ class InboxServiceProvider extends ServiceProvider
 
         $this->app->singleton(EnrichmentProviderRegistry::class, function ($app) {
             $registry = new EnrichmentProviderRegistry();
-            try {
-                if (class_exists(\Platform\Core\Services\OpenAiService::class)) {
-                    $registry->register(new OpenAiEnrichmentProvider(), asDefault: true);
-                }
-            } catch (\Throwable $e) {
-                // OpenAiService not available — registry stays empty; jobs will
-                // record FAILED status instead of crashing.
-            }
-            // Claude provider — registered when the Anthropic key exists. Lets
-            // templates with preferred_provider="claude:…" resolve and adds a
-            // second option for the show-view re-run picker.
-            if ((string) config('ai.anthropic.api_key', '') !== '') {
-                $registry->register(new ClaudeEnrichmentProvider());
-            }
+            // EIN anbieter-agnostischer Provider. Er routet über die zentrale
+            // Core\LLMProviderRegistry anhand von template.preferred_provider
+            // ("claude:…" / "openai:…" / "local:…"). Neues Backend = Core-Provider
+            // registrieren — hier nichts ändern. (Früher: je ein Enrichment-Provider
+            // pro Anbieter mit dupliziertem Prompt-/Parse-/Kosten-Code.)
+            $registry->register(new GatewayEnrichmentProvider(), asDefault: true);
             return $registry;
         });
 
