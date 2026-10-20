@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxItemEnrichment;
+use Platform\Inbox\Services\InboxEntityLinkService;
 
 /**
  * Loads the full context the V2 thread cockpit needs in one round-trip:
@@ -95,28 +96,14 @@ class CockpitDataLoader
     }
 
     /**
-     * Linked entities via organization_entity_links morph table — guard the
-     * table existence so an organization-less deploy still renders.
+     * Linked entities via the Organization DimensionLink bridge (soft-coupled:
+     * InboxEntityLinkService returns [] when organization isn't installed).
      *
-     * @return array<int, array{id: int, name: string|null, kind: string|null}>
+     * @return array<int, array{id: int, name: string|null, type: string|null, code: string|null}>
      */
     protected function loadLinkedEntities(InboxItem $item): array
     {
-        if (!Schema::hasTable('organization_entity_links')) {
-            return [];
-        }
-        $rows = DB::table('organization_entity_links as l')
-            ->leftJoin('organization_entities as e', 'e.id', '=', 'l.entity_id')
-            ->where('l.linkable_type', 'inbox_item')
-            ->where('l.linkable_id', $item->id)
-            ->select('e.id', 'e.name', 'e.uuid')
-            ->limit(20)
-            ->get();
-        return $rows->map(fn ($r) => [
-            'id' => (int) $r->id,
-            'name' => $r->name,
-            'uuid' => $r->uuid,
-        ])->all();
+        return array_slice(app(InboxEntityLinkService::class)->linksFor($item), 0, 20);
     }
 
     /**
