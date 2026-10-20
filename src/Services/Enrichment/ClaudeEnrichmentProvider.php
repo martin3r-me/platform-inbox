@@ -2,7 +2,6 @@
 
 namespace Platform\Inbox\Services\Enrichment;
 
-use Illuminate\Support\Facades\Http;
 use Platform\Inbox\Contracts\InboxEnrichmentProvider;
 use Platform\Inbox\Models\InboxEnrichmentTemplate;
 use Platform\Inbox\Models\InboxItem;
@@ -39,18 +38,22 @@ class ClaudeEnrichmentProvider implements InboxEnrichmentProvider
 
     public function run(InboxItem $item, InboxEnrichmentTemplate $template): EnrichmentResult
     {
-        $apiKey = (string) config('ai.anthropic.api_key', '');
-        if ($apiKey === '') {
-            return EnrichmentResult::fail('ANTHROPIC_API_KEY nicht konfiguriert.', $this->resolveModel($template));
-        }
-
         $model = $this->resolveModel($template);
         $startedAt = microtime(true);
 
+        // Zentrale Model-Schicht statt eigenem HTTP-Call: der Core-AnthropicProvider
+        // kapselt Endpoint, Key (config ai.anthropic.*), API-Version, Fehler-Logging
+        // und Kostenbasis an EINER Stelle. Dadurch kann z.B. ein leeres Guthaben nicht
+        // mehr still nur in dieser Pipeline auflaufen (Core loggt den HTTP-Fehler), und
+        // Modellwahl/Provider sind konsistent mit dem Rest der Plattform.
+        $provider = app(\Platform\Core\Services\LLMProviderRegistry::class)->get('anthropic');
+        if ($provider === null || ! $provider->isAvailable()) {
+            return EnrichmentResult::fail('Anthropic-Provider nicht verfügbar (Core LLMProviderRegistry).', $model);
+        }
+
         $userPrompt = $this->fillPrompt($template->prompt_template, $item);
 
-        // Anthropic Messages API: JSON enforcement is done via explicit system
-        // instruction. The model honours "respond ONLY with JSON" reliably.
+        // JSON-Erzwingung über System-Instruktion (Anthropic kennt kein response_format).
         $systemSegments = [];
         if (!empty($template->system_prompt)) {
             $systemSegments[] = $template->system_prompt;
@@ -59,46 +62,31 @@ class ClaudeEnrichmentProvider implements InboxEnrichmentProvider
         $system = implode("\n\n", $systemSegments);
 
         try {
-            $response = Http::withHeaders([
-                'x-api-key' => $apiKey,
-                'anthropic-version' => '2023-06-01',
-                'content-type' => 'application/json',
-            ])->timeout(120)->post('https://api.anthropic.com/v1/messages', [
-                'model' => $model,
-                'max_tokens' => 4096,
-                'system' => $system,
-                'messages' => [
-                    ['role' => 'user', 'content' => $userPrompt],
-                ],
-            ]);
+            $result = $provider->chat(
+                [['role' => 'user', 'content' => $userPrompt]],
+                ['model' => $model, 'system' => $system, 'max_tokens' => 4096],
+            );
         } catch (\Throwable $e) {
+            // Core wirft bei HTTP-Fehlern (inkl. "credit balance too low") eine
+            // RuntimeException mit dem API-Body — landet als error_message am Lauf.
             return EnrichmentResult::fail($e->getMessage(), $model);
         }
 
         $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
 
-        if (!$response->successful()) {
-            return EnrichmentResult::fail(
-                sprintf('Anthropic HTTP %d: %s', $response->status(), mb_substr($response->body(), 0, 300)),
-                $model,
-            );
-        }
-
-        $data = $response->json();
-        $content = $this->extractText($data);
-        $usage = $data['usage'] ?? [];
-
-        $output = $this->parseJson($content);
+        // Core liefert den Text bereits extrahiert unter 'content'.
+        $output = $this->parseJson((string) ($result['content'] ?? ''));
         if ($output === null) {
             return EnrichmentResult::fail('Provider returned non-JSON content.', $model);
         }
 
+        $usage = $result['usage'] ?? [];
         $tokensIn = (int) ($usage['input_tokens'] ?? 0);
         $tokensOut = (int) ($usage['output_tokens'] ?? 0);
 
         return EnrichmentResult::ok(
             output: $output,
-            providerModel: $model,
+            providerModel: (string) ($result['model'] ?? $model),
             tokensInput: $tokensIn ?: null,
             tokensOutput: $tokensOut ?: null,
             costMicroCents: $this->estimateCost($model, $tokensIn, $tokensOut),
@@ -135,18 +123,6 @@ class ClaudeEnrichmentProvider implements InboxEnrichmentProvider
             '{language}' => (string) ($item->language ?? 'de'),
             '{participants_list}' => $participantsList,
         ]);
-    }
-
-    protected function extractText(array $data): string
-    {
-        $parts = $data['content'] ?? [];
-        $texts = [];
-        foreach ($parts as $part) {
-            if (($part['type'] ?? '') === 'text' && isset($part['text'])) {
-                $texts[] = (string) $part['text'];
-            }
-        }
-        return implode("\n", $texts);
     }
 
     protected function parseJson(string $content): ?array
