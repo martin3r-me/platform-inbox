@@ -1,17 +1,5 @@
 {
   "name": "martin3r/platform-inbox",
-  "description": "User-centric communication inbox — triage, compose and link sessions from user-connectors to organization entities.",
-  "type": "library",
-  "autoload": {
-    "psr-4": {
-      "Platform\\Inbox\\": "src/"
-    }
-  },
-  "extra": {
-    "laravel": {
-      "providers": [
-        "Platform\\Inbox\\InboxServiceProvider"
-      ]
-    }
-  }
+  "description": "Aufgelöst: die Inbox-Engine lebt in Core (Platform\\Core\\Inbox), der Eingang (UI) in home. Dieses Paket ist ein leerer Grabstein — kein ServiceProvider, keine Klassen. Aus der Instanz-composer.json entfernen.",
+  "license": "proprietary"
 }
