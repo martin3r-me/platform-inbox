@@ -3,7 +3,7 @@
 namespace Platform\Inbox;
 
 use Platform\Core\Inbox\Inbox as CoreInbox;
-use Platform\Inbox\Models\InboxItem;
+use Platform\Core\Inbox\Models\InboxItem;
 
 /**
  * Rückwärtskompatibler SHIM (Phase 0 des Umbaus).

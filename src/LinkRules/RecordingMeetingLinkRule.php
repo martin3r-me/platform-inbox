@@ -3,7 +3,7 @@
 namespace Platform\Inbox\LinkRules;
 
 use Platform\Core\Inbox\Contracts\LinkRule;
-use Platform\Inbox\Models\InboxItem;
+use Platform\Core\Inbox\Models\InboxItem;
 use Platform\Core\Inbox\Services\InboxRecordingCorrelator;
 
 /**

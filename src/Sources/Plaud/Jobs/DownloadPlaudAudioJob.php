@@ -11,7 +11,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Platform\Core\Services\ContextFileService;
-use Platform\Inbox\Models\InboxItem;
+use Platform\Core\Inbox\Models\InboxItem;
 use Throwable;
 
 /**

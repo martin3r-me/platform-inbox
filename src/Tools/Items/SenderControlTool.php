@@ -8,7 +8,7 @@ use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
 use Platform\Core\Inbox\Enums\Status;
 use Platform\Core\Inbox\Enums\SubscriptionStatus;
-use Platform\Inbox\Models\InboxItem;
+use Platform\Core\Inbox\Models\InboxItem;
 use Platform\Core\Inbox\Models\InboxSenderSubscription;
 
 /**

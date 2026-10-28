@@ -7,7 +7,7 @@ use Platform\Core\Contracts\ToolContract;
 use Platform\Core\Contracts\ToolContext;
 use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
-use Platform\Inbox\Models\InboxItem;
+use Platform\Core\Inbox\Models\InboxItem;
 use Platform\Core\Inbox\Models\InboxItemParticipant;
 use Platform\Core\Inbox\Services\InboxIngestionService;
 

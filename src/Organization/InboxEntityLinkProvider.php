@@ -3,7 +3,7 @@
 namespace Platform\Inbox\Organization;
 
 use Illuminate\Database\Eloquent\Builder;
-use Platform\Inbox\Models\InboxItem;
+use Platform\Core\Inbox\Models\InboxItem;
 use Platform\Organization\Contracts\EntityLinkProvider;
 
 /**

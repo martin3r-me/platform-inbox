@@ -7,7 +7,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Platform\Core\Inbox\Enums\Channel;
-use Platform\Inbox\Models\InboxItem;
+use Platform\Core\Inbox\Models\InboxItem;
 use Platform\Organization\Models\OrganizationTimeEntry;
 use Platform\Organization\Services\EntityDimensionBridge;
 use Platform\UserConnectors\Models\UserConnectorMeetingSession;

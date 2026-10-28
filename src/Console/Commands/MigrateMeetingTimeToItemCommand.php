@@ -4,7 +4,7 @@ namespace Platform\Inbox\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
-use Platform\Inbox\Models\InboxItem;
+use Platform\Core\Inbox\Models\InboxItem;
 use Platform\Organization\Models\OrganizationTimeEntry;
 use Platform\Organization\Services\EntityDimensionBridge;
 

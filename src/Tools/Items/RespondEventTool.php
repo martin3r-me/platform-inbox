@@ -9,7 +9,7 @@ use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
 use Platform\Core\Tools\ToolRegistry;
 use Platform\Core\Inbox\Enums\Status;
-use Platform\Inbox\Models\InboxItem;
+use Platform\Core\Inbox\Models\InboxItem;
 
 /**
  * Convenience: respond accept/decline/tentative to a meeting inbox item.

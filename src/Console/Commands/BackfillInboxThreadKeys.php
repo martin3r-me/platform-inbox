@@ -3,7 +3,7 @@
 namespace Platform\Inbox\Console\Commands;
 
 use Illuminate\Console\Command;
-use Platform\Inbox\Models\InboxItem;
+use Platform\Core\Inbox\Models\InboxItem;
 use Platform\Core\Inbox\Services\V2\ThreadResolver;
 
 /**
