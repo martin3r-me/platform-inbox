@@ -6,7 +6,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Platform\Core\Inbox\Contracts\SourceDetail;
-use Platform\Inbox\Enums\InboxItemRelation;
+use Platform\Core\Inbox\Enums\InboxItemRelation;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxItemEnrichment;
 use Platform\Inbox\Services\InboxItemLinkService;

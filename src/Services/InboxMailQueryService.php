@@ -6,8 +6,8 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Platform\Inbox\Contracts\InboxMailQueryContract;
-use Platform\Inbox\Enums\Channel;
-use Platform\Inbox\Enums\InboxItemStatus;
+use Platform\Core\Inbox\Enums\Channel;
+use Platform\Core\Inbox\Enums\Status;
 use Platform\Inbox\Models\InboxItem;
 
 /**
@@ -23,7 +23,7 @@ class InboxMailQueryService implements InboxMailQueryContract
         $items = InboxItem::query()
             ->where('user_id', $userId)
             ->where('channel', Channel::Mail->value)
-            ->where('status', InboxItemStatus::New->value)
+            ->where('status', Status::New->value)
             ->where(function ($q) {
                 $q->whereNull('snoozed_until')->orWhere('snoozed_until', '<=', now());
             })

@@ -5,8 +5,8 @@ namespace Platform\Inbox\Services;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Platform\Inbox\Enums\InboxItemStatus;
-use Platform\Inbox\Enums\SubscriptionStatus;
+use Platform\Core\Inbox\Enums\Status;
+use Platform\Core\Inbox\Enums\SubscriptionStatus;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxSenderSubscription;
 
@@ -582,10 +582,10 @@ class InboxIngestionService
         return $result;
     }
 
-    protected function statusFromSubscription(int $userId, string $kind, ?string $identifier): ?InboxItemStatus
+    protected function statusFromSubscription(int $userId, string $kind, ?string $identifier): ?Status
     {
         if ($identifier === null) {
-            return InboxItemStatus::New;
+            return Status::New;
         }
 
         $sub = InboxSenderSubscription::query()
@@ -595,13 +595,13 @@ class InboxIngestionService
             ->first();
 
         if ($sub === null) {
-            return InboxItemStatus::New;
+            return Status::New;
         }
 
         return match ($sub->status) {
             SubscriptionStatus::Unsubscribed => null,
-            SubscriptionStatus::Muted => InboxItemStatus::Ignored,
-            SubscriptionStatus::Subscribed => InboxItemStatus::New,
+            SubscriptionStatus::Muted => Status::Ignored,
+            SubscriptionStatus::Subscribed => Status::New,
         };
     }
 

@@ -7,8 +7,8 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Platform\Core\Models\User;
 use Platform\Inbox\Contracts\InboxDelivery;
-use Platform\Inbox\Enums\Channel;
-use Platform\Inbox\Enums\InboxItemStatus;
+use Platform\Core\Inbox\Enums\Channel;
+use Platform\Core\Inbox\Enums\Status;
 use Platform\Inbox\Models\InboxItem;
 
 /**
@@ -65,7 +65,7 @@ class InboxDeliveryService implements InboxDelivery
             'body'              => $body,
             'body_format'       => 'text',
             'direction'         => 'inbound',
-            'status'            => InboxItemStatus::New->value,
+            'status'            => Status::New->value,
             'received_at'       => $receivedAt,
             'importance_score'  => isset($payload['importance']) ? (float) $payload['importance'] : null,
         ]);

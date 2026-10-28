@@ -3,7 +3,7 @@
 namespace Platform\Inbox\Services;
 
 use Illuminate\Support\Collection;
-use Platform\Inbox\Enums\InboxItemStatus;
+use Platform\Core\Inbox\Enums\Status;
 use Platform\Inbox\Models\InboxAutoLinkEvent;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxLinkRule;
@@ -81,9 +81,9 @@ class InboxRuleEngine
             }
         }
 
-        if ($markAsDone && $item->status !== InboxItemStatus::Done) {
+        if ($markAsDone && $item->status !== Status::Done) {
             $item->forceFill([
-                'status' => InboxItemStatus::Done->value,
+                'status' => Status::Done->value,
                 'handled_at' => now(),
             ])->save();
         }

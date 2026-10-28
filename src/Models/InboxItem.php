@@ -9,8 +9,8 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Platform\Core\Models\Team;
 use Platform\Core\Models\User;
 use Platform\Core\Traits\HasContextFileReferences;
-use Platform\Inbox\Enums\Channel;
-use Platform\Inbox\Enums\InboxItemStatus;
+use Platform\Core\Inbox\Enums\Channel;
+use Platform\Core\Inbox\Enums\Status;
 use Symfony\Component\Uid\UuidV7;
 
 class InboxItem extends Model
@@ -54,7 +54,7 @@ class InboxItem extends Model
 
     protected $casts = [
         'channel' => Channel::class,
-        'status' => InboxItemStatus::class,
+        'status' => Status::class,
         'snoozed_until' => 'datetime',
         'handled_at' => 'datetime',
         'received_at' => 'datetime',
@@ -131,7 +131,7 @@ class InboxItem extends Model
 
     public function scopeOpen($query)
     {
-        return $query->where('status', InboxItemStatus::New->value);
+        return $query->where('status', Status::New->value);
     }
 
     public function scopeNotSnoozed($query)

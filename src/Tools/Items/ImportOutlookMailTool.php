@@ -8,8 +8,8 @@ use Platform\Core\Contracts\ToolContract;
 use Platform\Core\Contracts\ToolContext;
 use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
-use Platform\Inbox\Enums\Channel;
-use Platform\Inbox\Enums\InboxItemStatus;
+use Platform\Core\Inbox\Enums\Channel;
+use Platform\Core\Inbox\Enums\Status;
 use Platform\Inbox\Services\InboxIngestionService;
 use Symfony\Component\Uid\UuidV7;
 
@@ -82,8 +82,8 @@ class ImportOutlookMailTool implements ToolContract, ToolMetadataContract
             return ToolResult::error('VALIDATION_ERROR', 'external_mail_id ist erforderlich.');
         }
         $status = ($arguments['status'] ?? 'new') === 'done'
-            ? InboxItemStatus::Done->value
-            : InboxItemStatus::New->value;
+            ? Status::Done->value
+            : Status::New->value;
 
         // Resolve the microsoft365 connection. connector_key lives on
         // user_connectors.key, not on the connections row — join over

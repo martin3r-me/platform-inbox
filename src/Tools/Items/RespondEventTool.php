@@ -8,7 +8,7 @@ use Platform\Core\Contracts\ToolContext;
 use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
 use Platform\Core\Tools\ToolRegistry;
-use Platform\Inbox\Enums\InboxItemStatus;
+use Platform\Core\Inbox\Enums\Status;
 use Platform\Inbox\Models\InboxItem;
 
 /**
@@ -97,7 +97,7 @@ class RespondEventTool implements ToolContract, ToolMetadataContract
         $closeOnSend = $arguments['close_on_send'] ?? true;
         if ($closeOnSend) {
             $item->update([
-                'status' => InboxItemStatus::Done->value,
+                'status' => Status::Done->value,
                 'handled_at' => now(),
             ]);
         }

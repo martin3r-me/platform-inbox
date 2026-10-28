@@ -4,8 +4,8 @@ namespace Platform\Inbox\Services;
 
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
-use Platform\Inbox\Enums\Channel;
-use Platform\Inbox\Enums\InboxItemRelation;
+use Platform\Core\Inbox\Enums\Channel;
+use Platform\Core\Inbox\Enums\InboxItemRelation;
 use Platform\Inbox\Models\InboxItem;
 
 /**

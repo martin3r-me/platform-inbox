@@ -3,7 +3,7 @@
 namespace Platform\Inbox\Services;
 
 use Platform\Core\Inbox\Contracts\ItemRelations;
-use Platform\Inbox\Enums\InboxItemRelation;
+use Platform\Core\Inbox\Enums\InboxItemRelation;
 use Platform\Inbox\Models\InboxItemLink;
 
 /**

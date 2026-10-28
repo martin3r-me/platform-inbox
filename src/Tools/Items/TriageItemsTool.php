@@ -6,7 +6,7 @@ use Platform\Core\Contracts\ToolContract;
 use Platform\Core\Contracts\ToolContext;
 use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
-use Platform\Inbox\Enums\InboxItemStatus;
+use Platform\Core\Inbox\Enums\Status;
 use Platform\Inbox\Models\InboxItem;
 
 /**
@@ -72,10 +72,10 @@ class TriageItemsTool implements ToolContract, ToolMetadataContract
         }
 
         $payload = match ($action) {
-            'done' => ['status' => InboxItemStatus::Done->value, 'handled_at' => now(), 'snoozed_until' => null],
-            'ignored' => ['status' => InboxItemStatus::Ignored->value, 'handled_at' => now(), 'snoozed_until' => null],
-            'snooze' => ['status' => InboxItemStatus::Snoozed->value, 'snoozed_until' => now()->addHours($hours)],
-            'new' => ['status' => InboxItemStatus::New->value, 'handled_at' => null, 'snoozed_until' => null],
+            'done' => ['status' => Status::Done->value, 'handled_at' => now(), 'snoozed_until' => null],
+            'ignored' => ['status' => Status::Ignored->value, 'handled_at' => now(), 'snoozed_until' => null],
+            'snooze' => ['status' => Status::Snoozed->value, 'snoozed_until' => now()->addHours($hours)],
+            'new' => ['status' => Status::New->value, 'handled_at' => null, 'snoozed_until' => null],
             default => null,
         };
         if ($payload === null) {

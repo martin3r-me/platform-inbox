@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Platform\Core\Models\Team;
 use Platform\Core\Models\User;
-use Platform\Inbox\Enums\SubscriptionStatus;
+use Platform\Core\Inbox\Enums\SubscriptionStatus;
 use Symfony\Component\Uid\UuidV7;
 
 class InboxSenderSubscription extends Model

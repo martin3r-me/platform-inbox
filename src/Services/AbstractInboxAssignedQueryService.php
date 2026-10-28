@@ -3,8 +3,8 @@
 namespace Platform\Inbox\Services;
 
 use Illuminate\Support\Carbon;
-use Platform\Inbox\Enums\Channel;
-use Platform\Inbox\Enums\InboxItemStatus;
+use Platform\Core\Inbox\Enums\Channel;
+use Platform\Core\Inbox\Enums\Status;
 use Platform\Inbox\Models\InboxItem;
 
 /**
@@ -34,7 +34,7 @@ abstract class AbstractInboxAssignedQueryService
         $items = InboxItem::query()
             ->where('user_id', $userId)
             ->where('channel', $this->channel()->value)
-            ->where('status', InboxItemStatus::New->value)
+            ->where('status', Status::New->value)
             ->where(function ($q) {
                 $q->whereNull('snoozed_until')->orWhere('snoozed_until', '<=', now());
             })
@@ -48,7 +48,7 @@ abstract class AbstractInboxAssignedQueryService
             'sender'  => $item->sender_label ?: 'Zugewiesen',
             'preview' => $item->preview,
             'time'    => $this->timeLabel($item->received_at ? Carbon::parse($item->received_at) : null),
-            'unread'  => $item->status?->value === InboxItemStatus::New->value,
+            'unread'  => $item->status?->value === Status::New->value,
         ])->all();
     }
 

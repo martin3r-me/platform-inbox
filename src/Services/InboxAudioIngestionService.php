@@ -5,8 +5,8 @@ namespace Platform\Inbox\Services;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Platform\Core\Services\ContextFileService;
-use Platform\Inbox\Enums\Channel;
-use Platform\Inbox\Enums\InboxItemStatus;
+use Platform\Core\Inbox\Enums\Channel;
+use Platform\Core\Inbox\Enums\Status;
 use Platform\Inbox\Jobs\RunEnrichmentJob;
 use Platform\Inbox\Models\InboxEnrichmentTemplate;
 use Platform\Inbox\Models\InboxItem;
@@ -72,7 +72,7 @@ class InboxAudioIngestionService
                     : null,
                 'audio_recorded_at' => $payload['audio_recorded_at'] ?? null,
                 'direction' => 'inbound',
-                'status' => InboxItemStatus::New->value,
+                'status' => Status::New->value,
                 'received_at' => $payload['audio_recorded_at'] ?? $now,
             ]);
 

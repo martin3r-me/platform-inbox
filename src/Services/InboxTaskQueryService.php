@@ -3,7 +3,7 @@
 namespace Platform\Inbox\Services;
 
 use Platform\Inbox\Contracts\InboxTaskQueryContract;
-use Platform\Inbox\Enums\Channel;
+use Platform\Core\Inbox\Enums\Channel;
 
 /**
  * Aufgaben-Sicht: Task-Items kommen per deliver() aus dem planner (Zuweisung an

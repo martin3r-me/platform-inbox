@@ -3,7 +3,7 @@
 namespace Platform\Inbox\Services;
 
 use Platform\Inbox\Contracts\InboxTicketQueryContract;
-use Platform\Inbox\Enums\Channel;
+use Platform\Core\Inbox\Enums\Channel;
 
 /**
  * Ticket-Sicht: Ticket-Items kommen per deliver() aus dem helpdesk (Zuweisung an

@@ -6,7 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Platform\Inbox\Enums\Channel;
+use Platform\Core\Inbox\Enums\Channel;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Organization\Models\OrganizationTimeEntry;
 use Platform\Organization\Services\EntityDimensionBridge;

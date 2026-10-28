@@ -6,8 +6,8 @@ use Platform\Core\Contracts\ToolContract;
 use Platform\Core\Contracts\ToolContext;
 use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
-use Platform\Inbox\Enums\InboxItemStatus;
-use Platform\Inbox\Enums\SubscriptionStatus;
+use Platform\Core\Inbox\Enums\Status;
+use Platform\Core\Inbox\Enums\SubscriptionStatus;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxSenderSubscription;
 
@@ -91,7 +91,7 @@ class SenderControlTool implements ToolContract, ToolMetadataContract
                 // user "unsubscribes" but still has to manually ignore the row.
                 InboxItem::where('id', $item->id)
                     ->where('user_id', $context->user->id)
-                    ->update(['status' => InboxItemStatus::Ignored->value, 'handled_at' => now()]);
+                    ->update(['status' => Status::Ignored->value, 'handled_at' => now()]);
                 break;
             case 'subscribe':
                 $sub->update(['status' => SubscriptionStatus::Subscribed->value]);

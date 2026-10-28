@@ -4,7 +4,7 @@ namespace Platform\Inbox\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Platform\Inbox\Enums\InboxItemRelation;
+use Platform\Core\Inbox\Enums\InboxItemRelation;
 use Symfony\Component\Uid\UuidV7;
 
 /**

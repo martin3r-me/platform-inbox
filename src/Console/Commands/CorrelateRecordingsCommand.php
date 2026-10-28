@@ -4,8 +4,8 @@ namespace Platform\Inbox\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
-use Platform\Inbox\Enums\Channel;
-use Platform\Inbox\Enums\InboxItemRelation;
+use Platform\Core\Inbox\Enums\Channel;
+use Platform\Core\Inbox\Enums\InboxItemRelation;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Services\InboxItemLinkService;
 use Platform\Inbox\Services\InboxRecordingCorrelator;
