@@ -10,7 +10,9 @@ use Platform\Inbox\Services\InboxEntityLinkService;
 /**
  * Vererbt Knoten-Links über die Einheit: hängt EIN Item einer Gruppe an einem
  * Knoten, sollen ALLE Items derselben Gruppe dort hängen — auch die, die später
- * reinkommen. Gruppe = Mail-Thread (conversation_id) oder Termin-Serie (ical_uid).
+ * reinkommen. Gruppe = Mail-Thread (conversation_id), Termin (ical_uid) oder
+ * Termin-Serie (series_master_id). So trägt „Serie einmal an den Knoten" jede
+ * künftige Aufnahme/jeden Teilnehmer automatisch nach (Lenkungsausschuss-Fall).
  *
  * Damit „hängt der Thread einmal am Knoten, bleibt er dran — auch bei neuer Mail":
  * die neue Mail wird ein Item mit derselben conversation_id, der nächste Lauf erbt
@@ -34,7 +36,7 @@ class InheritNodeLinksCommand extends Command
         $from = now()->subDays((int) $this->option('days'));
         $applied = 0;
 
-        foreach (['conversation_id', 'ical_uid'] as $column) {
+        foreach (['conversation_id', 'ical_uid', 'series_master_id'] as $column) {
             $groups = InboxItem::query()
                 ->whereNotNull($column)
                 ->where('received_at', '>=', $from)

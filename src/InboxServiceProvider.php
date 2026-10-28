@@ -112,6 +112,7 @@ class InboxServiceProvider extends ServiceProvider
                 \Platform\Inbox\Console\Commands\ReenrichInboxItems::class,
                 \Platform\Inbox\Console\Commands\AutoClosePastItems::class,
                 \Platform\Inbox\Console\Commands\MaterializeMeetingTimeCommand::class,
+                \Platform\Inbox\Console\Commands\MigrateMeetingTimeToItemCommand::class,
                 \Platform\Inbox\Console\Commands\BackfillMeetingSeriesCommand::class,
                 \Platform\Inbox\Console\Commands\CorrelateRecordingsCommand::class,
                 \Platform\Inbox\Console\Commands\InheritNodeLinksCommand::class,
