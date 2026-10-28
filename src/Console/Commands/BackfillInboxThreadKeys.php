@@ -4,7 +4,7 @@ namespace Platform\Inbox\Console\Commands;
 
 use Illuminate\Console\Command;
 use Platform\Inbox\Models\InboxItem;
-use Platform\Inbox\Services\V2\ThreadResolver;
+use Platform\Core\Inbox\Services\V2\ThreadResolver;
 
 /**
  * One-shot backfill for the V2 thread_key column. Walks all existing

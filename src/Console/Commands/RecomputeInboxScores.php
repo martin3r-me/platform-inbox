@@ -4,8 +4,8 @@ namespace Platform\Inbox\Console\Commands;
 
 use Illuminate\Console\Command;
 use Platform\Inbox\Models\InboxItem;
-use Platform\Inbox\Services\V2\ImportanceScorer;
-use Platform\Inbox\Services\V2\SenderPulseUpdater;
+use Platform\Core\Inbox\Services\V2\ImportanceScorer;
+use Platform\Core\Inbox\Services\V2\SenderPulseUpdater;
 
 /**
  * Walks recent inbox_items, recomputes importance_score, then refreshes the

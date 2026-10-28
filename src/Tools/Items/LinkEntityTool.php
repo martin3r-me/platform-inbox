@@ -8,7 +8,7 @@ use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Services\InboxEntityLinkService;
-use Platform\Inbox\Services\InboxRuleEngine;
+use Platform\Core\Inbox\Services\InboxRuleEngine;
 
 /**
  * Link an inbox item to an organization entity. When also_create_rule=true

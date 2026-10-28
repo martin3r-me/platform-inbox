@@ -472,7 +472,7 @@ class InboxIngestionService
             return;
         }
 
-        $engine = app(\Platform\Inbox\Services\InboxRuleEngine::class);
+        $engine = app(\Platform\Core\Inbox\Services\InboxRuleEngine::class);
         foreach ($items as $item) {
             try {
                 $engine->applyRulesTo($item);
