@@ -10,10 +10,12 @@ use Platform\Inbox\Enums\InboxItemStatus;
 use Platform\Inbox\Jobs\RunEnrichmentJob;
 use Platform\Inbox\Models\InboxEnrichmentTemplate;
 use Platform\Inbox\Models\InboxItem;
+use Platform\Inbox\Models\InboxItemEnrichment;
 use Platform\Inbox\Models\InboxItemParticipant;
 use Platform\Inbox\Models\InboxItemSegment;
 use Platform\Inbox\Models\InboxSenderSubscription;
 use Platform\Inbox\Models\InboxVoiceProfile;
+use Platform\Inbox\Sources\Plaud\PlaudNoteParser;
 use Symfony\Component\Uid\UuidV7;
 
 /**
@@ -148,6 +150,11 @@ class InboxAudioIngestionService
             ]);
         }
 
+        // Vom Anbieter mitgelieferte Notiz (z. B. Plauds eigene Zusammenfassung) als
+        // sekundäre Enrichment ablegen — sonst geht sie verloren (whisper hält nur
+        // das Transkript, unser eigenes Enrichment hängt an LLM-Credits).
+        $this->storeVendorNote($item, $payload['vendor_note'] ?? null);
+
         $this->dispatchDefaultEnrichment($item);
 
         // Verknüpfungs-Regeln (Aufnahme↔Meeting per Zeit-Overlap u.a.) über die
@@ -214,6 +221,56 @@ class InboxAudioIngestionService
     protected function matchVoiceProfile(int $teamId, ?int $entityId, ?string $displayName): ?InboxVoiceProfile
     {
         return InboxVoiceProfile::findForTeam($teamId, $entityId, $displayName);
+    }
+
+    /**
+     * Legt eine vom Anbieter mitgelieferte Notiz (z. B. Plauds Markdown-
+     * Zusammenfassung) als SEKUNDÄRE Enrichment am Item ab (is_primary=false).
+     * Erkannte Abschnitte via PlaudNoteParser; nichts erkannt → rohe Notiz als
+     * summary (nichts geht verloren). Idempotent: ein plaud:onboard pro Item.
+     */
+    protected function storeVendorNote(InboxItem $item, ?string $note): void
+    {
+        $note = is_string($note) ? trim($note) : '';
+        if ($note === '') {
+            return;
+        }
+
+        if (InboxItemEnrichment::where('inbox_item_id', $item->id)->where('provider', 'plaud:onboard')->exists()) {
+            return;
+        }
+
+        try {
+            $parsed = app(PlaudNoteParser::class)->parse($note);
+        } catch (\Throwable $e) {
+            \Log::warning('Inbox: vendor-note parse failed', ['item_id' => $item->id, 'error' => $e->getMessage()]);
+            $parsed = [];
+        }
+
+        $output = array_filter([
+            'summary' => $parsed['summary'] ?? null,
+            'action_items_raw' => $parsed['action_items'] ?? null,
+            'ai_suggestions' => $parsed['ai_suggestions'] ?? null,
+            'outline' => $parsed['outline'] ?? null,
+        ], fn ($v) => $v !== null);
+
+        if (empty($output)) {
+            // Keine bekannten Abschnitte (anderes Locale/Format) → rohe Notiz behalten.
+            $output = ['summary' => $note];
+        }
+
+        InboxItemEnrichment::create([
+            'inbox_item_id' => $item->id,
+            'template_id' => null,
+            'template_key' => 'plaud-onboard',
+            'template_version' => 1,
+            'status' => InboxItemEnrichment::STATUS_DONE,
+            'provider' => 'plaud:onboard',
+            'provider_model' => 'plaud-builtin',
+            'output' => $output,
+            'is_primary' => false,
+            'run_at' => now(),
+        ]);
     }
 
     protected function dispatchDefaultEnrichment(InboxItem $item): void
