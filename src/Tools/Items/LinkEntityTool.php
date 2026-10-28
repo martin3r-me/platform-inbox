@@ -7,7 +7,7 @@ use Platform\Core\Contracts\ToolContext;
 use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
 use Platform\Inbox\Models\InboxItem;
-use Platform\Inbox\Services\InboxEntityLinkService;
+use Platform\Core\Inbox\Services\InboxEntityLinkService;
 use Platform\Core\Inbox\Services\InboxRuleEngine;
 
 /**

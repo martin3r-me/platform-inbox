@@ -5,7 +5,7 @@ namespace Platform\Inbox\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
 use Platform\Inbox\Models\InboxItem;
-use Platform\Inbox\Services\InboxEntityLinkService;
+use Platform\Core\Inbox\Services\InboxEntityLinkService;
 
 /**
  * Vererbt Knoten-Links über die Einheit: hängt EIN Item einer Gruppe an einem

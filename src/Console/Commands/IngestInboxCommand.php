@@ -3,7 +3,7 @@
 namespace Platform\Inbox\Console\Commands;
 
 use Illuminate\Console\Command;
-use Platform\Inbox\Services\InboxIngestionService;
+use Platform\Core\Inbox\Services\InboxIngestionService;
 
 class IngestInboxCommand extends Command
 {

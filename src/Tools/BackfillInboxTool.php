@@ -6,7 +6,7 @@ use Platform\Core\Contracts\ToolContract;
 use Platform\Core\Contracts\ToolContext;
 use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
-use Platform\Inbox\Services\InboxIngestionService;
+use Platform\Core\Inbox\Services\InboxIngestionService;
 
 /**
  * Re-runs the user-connector → inbox ingest over a wide historical window

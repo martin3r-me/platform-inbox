@@ -8,7 +8,7 @@ use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Core\Inbox\Models\InboxItemHandoff;
-use Platform\Inbox\Services\InboxHandoffService;
+use Platform\Core\Inbox\Services\InboxHandoffService;
 
 /**
  * Item-level handoff: turn an inbox item into a Planner-Task or a

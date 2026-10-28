@@ -10,7 +10,7 @@ use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
 use Platform\Core\Inbox\Enums\Channel;
 use Platform\Core\Inbox\Enums\Status;
-use Platform\Inbox\Services\InboxIngestionService;
+use Platform\Core\Inbox\Services\InboxIngestionService;
 use Symfony\Component\Uid\UuidV7;
 
 /**

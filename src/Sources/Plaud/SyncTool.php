@@ -10,7 +10,7 @@ use Platform\Core\Contracts\ToolResult;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Core\Inbox\Models\InboxItemEnrichment;
 use Platform\Core\Inbox\Models\InboxPlaudImport;
-use Platform\Inbox\Services\InboxAudioIngestionService;
+use Platform\Core\Inbox\Services\InboxAudioIngestionService;
 use Platform\Inbox\Sources\Plaud\Jobs\DownloadPlaudAudioJob;
 
 /**

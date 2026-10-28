@@ -7,8 +7,8 @@ use Illuminate\Support\Facades\Schema;
 use Platform\Core\Inbox\Enums\Channel;
 use Platform\Core\Inbox\Enums\InboxItemRelation;
 use Platform\Inbox\Models\InboxItem;
-use Platform\Inbox\Services\InboxItemLinkService;
-use Platform\Inbox\Services\InboxRecordingCorrelator;
+use Platform\Core\Inbox\Services\InboxItemLinkService;
+use Platform\Core\Inbox\Services\InboxRecordingCorrelator;
 
 /**
  * Sweep: hängt noch nicht verlinkte Aufnahmen ans passende Meeting (Zeit-Overlap).

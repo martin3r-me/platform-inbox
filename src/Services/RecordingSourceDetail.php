@@ -9,8 +9,8 @@ use Platform\Core\Inbox\Contracts\SourceDetail;
 use Platform\Core\Inbox\Enums\InboxItemRelation;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Core\Inbox\Models\InboxItemEnrichment;
-use Platform\Inbox\Services\InboxItemLinkService;
-use Platform\Inbox\Services\InboxRecordingCorrelator;
+use Platform\Core\Inbox\Services\InboxItemLinkService;
+use Platform\Core\Inbox\Services\InboxRecordingCorrelator;
 
 /**
  * Live-Detail für den Aufnahme-Kanal: Transkript-Segmente + Dauer + KI-Anreicherung

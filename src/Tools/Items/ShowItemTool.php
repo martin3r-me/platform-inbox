@@ -9,7 +9,7 @@ use Platform\Core\Contracts\ToolResult;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Core\Inbox\Models\InboxItemEnrichment;
 use Platform\Core\Inbox\Models\InboxItemHandoff;
-use Platform\Inbox\Services\InboxEntityLinkService;
+use Platform\Core\Inbox\Services\InboxEntityLinkService;
 
 /**
  * Full item context for triage decisions: body, primary enrichment

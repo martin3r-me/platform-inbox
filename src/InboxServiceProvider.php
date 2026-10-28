@@ -26,34 +26,34 @@ class InboxServiceProvider extends ServiceProvider
         // call/mail producers) resolve the contract and call link()/
         // supplements() without touching the Inbox schema directly.
         $this->app->bind(
-            \Platform\Inbox\Contracts\InboxItemLinkContract::class,
-            \Platform\Inbox\Services\InboxItemLinkService::class
+            \Platform\Core\Inbox\Contracts\InboxItemLinkContract::class,
+            \Platform\Core\Inbox\Services\InboxItemLinkService::class
         );
 
         // Link-Naht des Kerns: der UnitResolver fragt hierüber, welche Items via
         // Link zur selben Einheit gehören. Überschreibt Cores NullItemRelations.
         $this->app->bind(
             \Platform\Core\Inbox\Contracts\ItemRelations::class,
-            \Platform\Inbox\Services\ItemRelationsService::class
+            \Platform\Core\Inbox\Services\ItemRelationsService::class
         );
 
         // Handoff-Naht des Kerns: Item → Aufgabe/Ticket. Überschreibt NullItemHandoff.
         $this->app->bind(
             \Platform\Core\Inbox\Contracts\ItemHandoff::class,
-            \Platform\Inbox\Services\ItemHandoffService::class
+            \Platform\Core\Inbox\Services\ItemHandoffService::class
         );
 
         // Zuordnungs-Naht des Kerns: manuelle Aufnahme→Termin-Zuordnung.
         $this->app->bind(
             \Platform\Core\Inbox\Contracts\ItemLinking::class,
-            \Platform\Inbox\Services\ItemLinkingService::class
+            \Platform\Core\Inbox\Services\ItemLinkingService::class
         );
 
         // Aufnahme-Ingestion-Naht: Produzenten (whisper) liefern über Core, die
         // Materialisierung bleibt hier (InboxAudioIngestionService).
         $this->app->bind(
             \Platform\Core\Inbox\Contracts\RecordingIngestion::class,
-            \Platform\Inbox\Services\RecordingIngestionService::class
+            \Platform\Core\Inbox\Services\RecordingIngestionService::class
         );
 
         // Push-Kontrakt: interne Ereignisse anderer Module in die Inbox liefern.

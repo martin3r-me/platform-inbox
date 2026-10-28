@@ -9,7 +9,7 @@ use Platform\Core\Contracts\ToolResult;
 use Platform\Core\Inbox\Enums\Status;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Core\Inbox\Models\InboxItemHandoff;
-use Platform\Inbox\Services\InboxEntityLinkService;
+use Platform\Core\Inbox\Services\InboxEntityLinkService;
 
 /**
  * Lists inbox items for dialog-based triage. Defaults to the current user's
