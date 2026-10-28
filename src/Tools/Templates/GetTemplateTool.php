@@ -6,7 +6,7 @@ use Platform\Core\Contracts\ToolContract;
 use Platform\Core\Contracts\ToolContext;
 use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
-use Platform\Inbox\Models\InboxEnrichmentTemplate;
+use Platform\Core\Inbox\Models\InboxEnrichmentTemplate;
 
 /**
  * Returns a single enrichment template with full prompt + system_prompt +

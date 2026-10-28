@@ -11,8 +11,8 @@ use Platform\Inbox\Console\Commands\IngestInboxCommand;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxSenderSubscription;
 use Platform\Inbox\Services\ChannelRouter;
-use Platform\Inbox\Services\Enrichment\EnrichmentProviderRegistry;
-use Platform\Inbox\Services\Enrichment\GatewayEnrichmentProvider;
+use Platform\Core\Inbox\Services\Enrichment\EnrichmentProviderRegistry;
+use Platform\Core\Inbox\Services\Enrichment\GatewayEnrichmentProvider;
 
 class InboxServiceProvider extends ServiceProvider
 {

@@ -3,10 +3,10 @@
 namespace Platform\Inbox\Console\Commands;
 
 use Illuminate\Console\Command;
-use Platform\Inbox\Models\InboxEnrichmentTemplate;
+use Platform\Core\Inbox\Models\InboxEnrichmentTemplate;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxItemEnrichment;
-use Platform\Inbox\Services\Enrichment\EnrichmentDispatcher;
+use Platform\Core\Inbox\Services\Enrichment\EnrichmentDispatcher;
 
 /**
  * Re-runs the default enrichment for inbox items whose primary enrichment is

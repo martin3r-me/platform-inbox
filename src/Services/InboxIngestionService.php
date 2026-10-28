@@ -437,7 +437,7 @@ class InboxIngestionService
             ->whereIn('source_id', $sourceIds)
             ->get();
 
-        $dispatcher = app(\Platform\Inbox\Services\Enrichment\EnrichmentDispatcher::class);
+        $dispatcher = app(\Platform\Core\Inbox\Services\Enrichment\EnrichmentDispatcher::class);
 
         foreach ($items as $item) {
             $reason = $dispatcher->dispatchIfEligible($item, mode: 'auto');

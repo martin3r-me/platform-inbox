@@ -7,8 +7,8 @@ use Illuminate\Support\Facades\DB;
 use Platform\Core\Services\ContextFileService;
 use Platform\Core\Inbox\Enums\Channel;
 use Platform\Core\Inbox\Enums\Status;
-use Platform\Inbox\Jobs\RunEnrichmentJob;
-use Platform\Inbox\Models\InboxEnrichmentTemplate;
+use Platform\Core\Inbox\Jobs\RunEnrichmentJob;
+use Platform\Core\Inbox\Models\InboxEnrichmentTemplate;
 use Platform\Inbox\Models\InboxItem;
 use Platform\Inbox\Models\InboxItemEnrichment;
 use Platform\Inbox\Models\InboxItemParticipant;
@@ -278,7 +278,7 @@ class InboxAudioIngestionService
         // Audio recordings are the user's own recorded content (Plaud, Whisper
         // upload, …) — always high-signal, dispatch in 'user' mode so the
         // dispatcher applies the skip policy but doesn't gate on VIP.
-        $reason = app(\Platform\Inbox\Services\Enrichment\EnrichmentDispatcher::class)
+        $reason = app(\Platform\Core\Inbox\Services\Enrichment\EnrichmentDispatcher::class)
             ->dispatchIfEligible($item, mode: 'user');
         if ($reason !== null) {
             \Log::debug('Inbox: audio enrichment not dispatched', [

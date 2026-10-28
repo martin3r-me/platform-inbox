@@ -6,7 +6,7 @@ use Platform\Core\Contracts\ToolContract;
 use Platform\Core\Contracts\ToolContext;
 use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
-use Platform\Inbox\Models\InboxEnrichmentTemplate;
+use Platform\Core\Inbox\Models\InboxEnrichmentTemplate;
 
 /**
  * Create or update a team-scoped enrichment template.
