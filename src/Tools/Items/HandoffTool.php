@@ -7,7 +7,7 @@ use Platform\Core\Contracts\ToolContext;
 use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
 use Platform\Inbox\Models\InboxItem;
-use Platform\Inbox\Models\InboxItemHandoff;
+use Platform\Core\Inbox\Models\InboxItemHandoff;
 use Platform\Inbox\Services\InboxHandoffService;
 
 /**

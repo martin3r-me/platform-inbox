@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 use Platform\Core\Inbox\Enums\Status;
 use Platform\Core\Inbox\Enums\SubscriptionStatus;
 use Platform\Inbox\Models\InboxItem;
-use Platform\Inbox\Models\InboxSenderSubscription;
+use Platform\Core\Inbox\Models\InboxSenderSubscription;
 
 /**
  * Materializes user-connector session rows into per-user inbox_items.
@@ -285,7 +285,7 @@ class InboxIngestionService
             case 'user_connector_mail_session':
                 if ($from = $session->from_address ?? null) {
                     $rows[] = $this->participantRow(
-                        role: \Platform\Inbox\Models\InboxItemParticipant::ROLE_SENDER,
+                        role: \Platform\Core\Inbox\Models\InboxItemParticipant::ROLE_SENDER,
                         identifier: $from,
                         kind: 'email',
                         displayName: $session->from_name ?? null,
@@ -293,14 +293,14 @@ class InboxIngestionService
                 }
                 foreach ($this->splitAddresses($session->to_addresses ?? null) as $address) {
                     $rows[] = $this->participantRow(
-                        role: \Platform\Inbox\Models\InboxItemParticipant::ROLE_RECIPIENT,
+                        role: \Platform\Core\Inbox\Models\InboxItemParticipant::ROLE_RECIPIENT,
                         identifier: $address,
                         kind: 'email',
                     );
                 }
                 foreach ($this->splitAddresses($session->cc_addresses ?? null) as $address) {
                     $rows[] = $this->participantRow(
-                        role: \Platform\Inbox\Models\InboxItemParticipant::ROLE_CC,
+                        role: \Platform\Core\Inbox\Models\InboxItemParticipant::ROLE_CC,
                         identifier: $address,
                         kind: 'email',
                     );
@@ -311,7 +311,7 @@ class InboxIngestionService
                 $callerNumber = $direction === 'inbound' ? ($session->from_number ?? null) : ($session->to_number ?? null);
                 if ($callerNumber) {
                     $rows[] = $this->participantRow(
-                        role: \Platform\Inbox\Models\InboxItemParticipant::ROLE_SENDER,
+                        role: \Platform\Core\Inbox\Models\InboxItemParticipant::ROLE_SENDER,
                         identifier: $callerNumber,
                         kind: 'phone',
                     );
@@ -322,7 +322,7 @@ class InboxIngestionService
                 $from = $direction === 'inbound' ? ($session->from_identifier ?? null) : ($session->to_identifier ?? null);
                 if ($from) {
                     $rows[] = $this->participantRow(
-                        role: \Platform\Inbox\Models\InboxItemParticipant::ROLE_SENDER,
+                        role: \Platform\Core\Inbox\Models\InboxItemParticipant::ROLE_SENDER,
                         identifier: $from,
                         kind: 'teams',
                     );
@@ -332,7 +332,7 @@ class InboxIngestionService
             case 'user_connector_meeting_session':
                 if ($organizer = $session->organizer_address ?? null) {
                     $rows[] = $this->participantRow(
-                        role: \Platform\Inbox\Models\InboxItemParticipant::ROLE_ORGANIZER,
+                        role: \Platform\Core\Inbox\Models\InboxItemParticipant::ROLE_ORGANIZER,
                         identifier: $organizer,
                         kind: 'email',
                         displayName: $session->organizer_name ?? null,
@@ -340,7 +340,7 @@ class InboxIngestionService
                 }
                 foreach ($this->splitAddresses($session->attendee_addresses ?? null) as $address) {
                     $rows[] = $this->participantRow(
-                        role: \Platform\Inbox\Models\InboxItemParticipant::ROLE_ATTENDEE,
+                        role: \Platform\Core\Inbox\Models\InboxItemParticipant::ROLE_ATTENDEE,
                         identifier: $address,
                         kind: 'email',
                     );
@@ -613,6 +613,6 @@ class InboxIngestionService
 
     protected function normalizeSender(?string $value, string $kind): ?string
     {
-        return \Platform\Inbox\Models\InboxSenderSubscription::normalize($value, $kind);
+        return \Platform\Core\Inbox\Models\InboxSenderSubscription::normalize($value, $kind);
     }
 }

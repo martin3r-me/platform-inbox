@@ -8,8 +8,8 @@ use Platform\Core\Contracts\ToolContext;
 use Platform\Core\Contracts\ToolMetadataContract;
 use Platform\Core\Contracts\ToolResult;
 use Platform\Inbox\Models\InboxItem;
-use Platform\Inbox\Models\InboxItemEnrichment;
-use Platform\Inbox\Models\InboxPlaudImport;
+use Platform\Core\Inbox\Models\InboxItemEnrichment;
+use Platform\Core\Inbox\Models\InboxPlaudImport;
 use Platform\Inbox\Services\InboxAudioIngestionService;
 use Platform\Inbox\Sources\Plaud\Jobs\DownloadPlaudAudioJob;
 
@@ -297,8 +297,8 @@ class SyncTool implements ToolContract, ToolMetadataContract
         $oldId = (int) $import->inbox_item_id;
         if ($oldId) {
             InboxItemEnrichment::where('inbox_item_id', $oldId)->delete();
-            \Platform\Inbox\Models\InboxItemParticipant::where('inbox_item_id', $oldId)->delete();
-            \Platform\Inbox\Models\InboxItemSegment::where('inbox_item_id', $oldId)->delete();
+            \Platform\Core\Inbox\Models\InboxItemParticipant::where('inbox_item_id', $oldId)->delete();
+            \Platform\Core\Inbox\Models\InboxItemSegment::where('inbox_item_id', $oldId)->delete();
             InboxItem::where('id', $oldId)->delete();
         }
         $import->delete();

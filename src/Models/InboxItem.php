@@ -11,6 +11,9 @@ use Platform\Core\Models\User;
 use Platform\Core\Traits\HasContextFileReferences;
 use Platform\Core\Inbox\Enums\Channel;
 use Platform\Core\Inbox\Enums\Status;
+use Platform\Core\Inbox\Models\InboxItemEnrichment;
+use Platform\Core\Inbox\Models\InboxItemParticipant;
+use Platform\Core\Inbox\Models\InboxItemSegment;
 use Symfony\Component\Uid\UuidV7;
 
 class InboxItem extends Model

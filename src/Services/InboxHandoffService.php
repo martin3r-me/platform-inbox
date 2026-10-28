@@ -5,8 +5,8 @@ namespace Platform\Inbox\Services;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Schema;
 use Platform\Inbox\Models\InboxItem;
-use Platform\Inbox\Models\InboxItemEnrichment;
-use Platform\Inbox\Models\InboxItemHandoff;
+use Platform\Core\Inbox\Models\InboxItemEnrichment;
+use Platform\Core\Inbox\Models\InboxItemHandoff;
 
 /**
  * Routes an inbox-item (or a single action-item inside its enrichment)

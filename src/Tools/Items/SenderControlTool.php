@@ -9,7 +9,7 @@ use Platform\Core\Contracts\ToolResult;
 use Platform\Core\Inbox\Enums\Status;
 use Platform\Core\Inbox\Enums\SubscriptionStatus;
 use Platform\Inbox\Models\InboxItem;
-use Platform\Inbox\Models\InboxSenderSubscription;
+use Platform\Core\Inbox\Models\InboxSenderSubscription;
 
 /**
  * Sender-scoped controls — operate on the (user, sender_kind, sender_identifier)

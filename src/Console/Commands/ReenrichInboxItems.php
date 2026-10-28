@@ -5,7 +5,7 @@ namespace Platform\Inbox\Console\Commands;
 use Illuminate\Console\Command;
 use Platform\Core\Inbox\Models\InboxEnrichmentTemplate;
 use Platform\Inbox\Models\InboxItem;
-use Platform\Inbox\Models\InboxItemEnrichment;
+use Platform\Core\Inbox\Models\InboxItemEnrichment;
 use Platform\Core\Inbox\Services\Enrichment\EnrichmentDispatcher;
 
 /**

@@ -10,11 +10,11 @@ use Platform\Core\Inbox\Enums\Status;
 use Platform\Core\Inbox\Jobs\RunEnrichmentJob;
 use Platform\Core\Inbox\Models\InboxEnrichmentTemplate;
 use Platform\Inbox\Models\InboxItem;
-use Platform\Inbox\Models\InboxItemEnrichment;
-use Platform\Inbox\Models\InboxItemParticipant;
-use Platform\Inbox\Models\InboxItemSegment;
-use Platform\Inbox\Models\InboxSenderSubscription;
-use Platform\Inbox\Models\InboxVoiceProfile;
+use Platform\Core\Inbox\Models\InboxItemEnrichment;
+use Platform\Core\Inbox\Models\InboxItemParticipant;
+use Platform\Core\Inbox\Models\InboxItemSegment;
+use Platform\Core\Inbox\Models\InboxSenderSubscription;
+use Platform\Core\Inbox\Models\InboxVoiceProfile;
 use Platform\Inbox\Sources\Plaud\PlaudNoteParser;
 use Symfony\Component\Uid\UuidV7;
 

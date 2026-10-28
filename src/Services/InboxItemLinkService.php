@@ -5,7 +5,7 @@ namespace Platform\Inbox\Services;
 use Illuminate\Database\Eloquent\Collection;
 use Platform\Inbox\Contracts\InboxItemLinkContract;
 use Platform\Core\Inbox\Enums\InboxItemRelation;
-use Platform\Inbox\Models\InboxItemLink;
+use Platform\Core\Inbox\Models\InboxItemLink;
 
 /**
  * Default implementation of {@see InboxItemLinkContract}.

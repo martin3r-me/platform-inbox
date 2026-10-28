@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 use Platform\Core\Inbox\Contracts\SourceDetail;
 use Platform\Core\Inbox\Enums\InboxItemRelation;
 use Platform\Inbox\Models\InboxItem;
-use Platform\Inbox\Models\InboxItemEnrichment;
+use Platform\Core\Inbox\Models\InboxItemEnrichment;
 use Platform\Inbox\Services\InboxItemLinkService;
 use Platform\Inbox\Services\InboxRecordingCorrelator;
 

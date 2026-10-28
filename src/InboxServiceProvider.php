@@ -9,7 +9,7 @@ use Platform\Core\PlatformCore;
 use Platform\Core\Routing\ModuleRouter;
 use Platform\Inbox\Console\Commands\IngestInboxCommand;
 use Platform\Inbox\Models\InboxItem;
-use Platform\Inbox\Models\InboxSenderSubscription;
+use Platform\Core\Inbox\Models\InboxSenderSubscription;
 use Platform\Core\Inbox\Services\ChannelRouter;
 use Platform\Core\Inbox\Services\Enrichment\EnrichmentProviderRegistry;
 use Platform\Core\Inbox\Services\Enrichment\GatewayEnrichmentProvider;

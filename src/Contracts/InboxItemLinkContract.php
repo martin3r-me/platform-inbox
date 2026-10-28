@@ -4,7 +4,7 @@ namespace Platform\Inbox\Contracts;
 
 use Illuminate\Database\Eloquent\Collection;
 use Platform\Core\Inbox\Enums\InboxItemRelation;
-use Platform\Inbox\Models\InboxItemLink;
+use Platform\Core\Inbox\Models\InboxItemLink;
 
 /**
  * Public contract for cross-module InboxItem relations.

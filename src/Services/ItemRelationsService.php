@@ -4,7 +4,7 @@ namespace Platform\Inbox\Services;
 
 use Platform\Core\Inbox\Contracts\ItemRelations;
 use Platform\Core\Inbox\Enums\InboxItemRelation;
-use Platform\Inbox\Models\InboxItemLink;
+use Platform\Core\Inbox\Models\InboxItemLink;
 
 /**
  * Link-Naht des Kerns, implementiert über inbox_item_links. Entscheidet, WELCHE
