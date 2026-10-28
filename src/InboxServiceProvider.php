@@ -5,8 +5,6 @@ namespace Platform\Inbox;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Str;
-use Livewire\Livewire;
 use Platform\Core\PlatformCore;
 use Platform\Core\Routing\ModuleRouter;
 use Platform\Inbox\Console\Commands\IngestInboxCommand;
@@ -15,8 +13,6 @@ use Platform\Inbox\Models\InboxSenderSubscription;
 use Platform\Inbox\Services\ChannelRouter;
 use Platform\Inbox\Services\Enrichment\EnrichmentProviderRegistry;
 use Platform\Inbox\Services\Enrichment\GatewayEnrichmentProvider;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
 
 class InboxServiceProvider extends ServiceProvider
 {
@@ -231,38 +227,34 @@ class InboxServiceProvider extends ServiceProvider
             // Core-Inbox-Engine nicht geladen.
         }
 
+        // inbox ist headless: keine eigene UI/Navigation mehr — der Eingang lebt in
+        // home. Das Modul bleibt NUR registriert, damit die Bearer-Auth-API
+        // weiterläuft (ModuleRouter::apiGroup wirft ohne registriertes Modul).
+        // Keine navigation/sidebar → kein Menüeintrag; home blendet inbox zusätzlich
+        // explizit aus der Modul-Leiste aus.
         if (
             config()->has('inbox.routing') &&
             config()->has('inbox.navigation') &&
             PlatformCore::modulesTableExists()
         ) {
             PlatformCore::registerModule([
-                'key'        => 'inbox',
-                'title'      => 'Inbox',
-                'group'      => 'productivity',
-                'routing'    => config('inbox.routing'),
-                'guard'      => config('inbox.guard'),
-                'navigation' => config('inbox.navigation'),
-                'sidebar'    => config('inbox.sidebar'),
+                'key'     => 'inbox',
+                'title'   => 'Inbox',
+                'group'   => 'productivity',
+                'routing' => config('inbox.routing'),
+                'guard'   => config('inbox.guard'),
             ]);
         }
 
         if (PlatformCore::getModule('inbox')) {
-            ModuleRouter::group('inbox', function () {
-                $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
-            });
-
-            // Bearer-Auth API: /api/inbox/...
-            // Used by external clients (KyberOS Mac app etc.) to discover
-            // the currently-active meeting before kicking off a recording.
+            // Nur die Bearer-Auth-API: /api/inbox/... — der KyberOS-Mac-Client fragt
+            // vor einer Aufnahme das laufende Meeting ab. Keine Web-/UI-Routen mehr.
             ModuleRouter::apiGroup('inbox', function () {
                 $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
             });
         }
 
         $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
-        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'inbox');
-        $this->registerLivewireComponents();
 
         $this->publishes([
             __DIR__ . '/../config/inbox.php' => config_path('inbox.php'),
@@ -430,37 +422,4 @@ class InboxServiceProvider extends ServiceProvider
             : ($session->to_number ?? '');
     }
 
-    protected function registerLivewireComponents(): void
-    {
-        $basePath = __DIR__ . '/Livewire';
-        $baseNamespace = 'Platform\\Inbox\\Livewire';
-        $prefix = 'inbox';
-
-        if (!is_dir($basePath)) {
-            return;
-        }
-
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($basePath)
-        );
-
-        foreach ($iterator as $file) {
-            if (!$file->isFile() || $file->getExtension() !== 'php') {
-                continue;
-            }
-
-            $relativePath = str_replace($basePath . DIRECTORY_SEPARATOR, '', $file->getPathname());
-            $classPath = str_replace(['/', '.php'], ['\\', ''], $relativePath);
-            $class = $baseNamespace . '\\' . $classPath;
-
-            if (!class_exists($class)) {
-                continue;
-            }
-
-            $aliasPath = str_replace(['\\', '/'], '.', Str::kebab(str_replace('.php', '', $relativePath)));
-            $alias = $prefix . '.' . $aliasPath;
-
-            Livewire::component($alias, $class);
-        }
-    }
 }
