@@ -56,37 +56,30 @@ class InboxServiceProvider extends ServiceProvider
             \Platform\Core\Inbox\Services\RecordingIngestionService::class
         );
 
-        // Push-Kontrakt: interne Ereignisse anderer Module in die Inbox liefern.
-        // Kurzform: \Platform\Inbox\Inbox::deliver([...]).
-        $this->app->bind(
-            \Platform\Inbox\Contracts\InboxDelivery::class,
-            \Platform\Inbox\Services\InboxDeliveryService::class
-        );
-
         // Query-Kontrakt Meeting-Kanal: home rendert damit den Reading-Pane.
         $this->app->bind(
-            \Platform\Inbox\Contracts\InboxMeetingQueryContract::class,
-            \Platform\Inbox\Services\InboxMeetingQueryService::class
+            \Platform\Core\Inbox\Contracts\InboxMeetingQueryContract::class,
+            \Platform\Core\Inbox\Services\InboxMeetingQueryService::class
         );
 
         $this->app->bind(
-            \Platform\Inbox\Contracts\InboxMailQueryContract::class,
-            \Platform\Inbox\Services\InboxMailQueryService::class
+            \Platform\Core\Inbox\Contracts\InboxMailQueryContract::class,
+            \Platform\Core\Inbox\Services\InboxMailQueryService::class
         );
 
         $this->app->bind(
-            \Platform\Inbox\Contracts\InboxCallQueryContract::class,
-            \Platform\Inbox\Services\InboxCallQueryService::class
+            \Platform\Core\Inbox\Contracts\InboxCallQueryContract::class,
+            \Platform\Core\Inbox\Services\InboxCallQueryService::class
         );
 
         $this->app->bind(
-            \Platform\Inbox\Contracts\InboxTaskQueryContract::class,
-            \Platform\Inbox\Services\InboxTaskQueryService::class
+            \Platform\Core\Inbox\Contracts\InboxTaskQueryContract::class,
+            \Platform\Core\Inbox\Services\InboxTaskQueryService::class
         );
 
         $this->app->bind(
-            \Platform\Inbox\Contracts\InboxTicketQueryContract::class,
-            \Platform\Inbox\Services\InboxTicketQueryService::class
+            \Platform\Core\Inbox\Contracts\InboxTicketQueryContract::class,
+            \Platform\Core\Inbox\Services\InboxTicketQueryService::class
         );
 
         $this->app->singleton(EnrichmentProviderRegistry::class, function ($app) {
@@ -193,27 +186,27 @@ class InboxServiceProvider extends ServiceProvider
         try {
             if (class_exists(\Platform\Core\Inbox\Support\SourceDetailRegistry::class)) {
                 $sourceDetails = resolve(\Platform\Core\Inbox\Support\SourceDetailRegistry::class);
-                $sourceDetails->register(new \Platform\Inbox\Services\RecordingSourceDetail());
+                $sourceDetails->register(new \Platform\Core\Inbox\Services\RecordingSourceDetail());
 
                 // Detail-Naht der übrigen Kanäle über Adapter an die bestehenden
                 // QueryServices — home liest damit JEDES Kanal-Detail über die EINE
                 // Core-InboxQuery, nicht mehr über 5 Inbox*QueryContracts.
                 $channelContracts = [
-                    'meeting' => \Platform\Inbox\Contracts\InboxMeetingQueryContract::class,
-                    'mail'    => \Platform\Inbox\Contracts\InboxMailQueryContract::class,
-                    'call'    => \Platform\Inbox\Contracts\InboxCallQueryContract::class,
-                    'task'    => \Platform\Inbox\Contracts\InboxTaskQueryContract::class,
-                    'ticket'  => \Platform\Inbox\Contracts\InboxTicketQueryContract::class,
+                    'meeting' => \Platform\Core\Inbox\Contracts\InboxMeetingQueryContract::class,
+                    'mail'    => \Platform\Core\Inbox\Contracts\InboxMailQueryContract::class,
+                    'call'    => \Platform\Core\Inbox\Contracts\InboxCallQueryContract::class,
+                    'task'    => \Platform\Core\Inbox\Contracts\InboxTaskQueryContract::class,
+                    'ticket'  => \Platform\Core\Inbox\Contracts\InboxTicketQueryContract::class,
                 ];
                 foreach ($channelContracts as $channel => $contract) {
-                    $sourceDetails->register(new \Platform\Inbox\Services\DelegatingSourceDetail($channel, $contract));
+                    $sourceDetails->register(new \Platform\Core\Inbox\Services\DelegatingSourceDetail($channel, $contract));
                 }
 
                 // Listen-Naht dito: ein konsolidierter Stream über die Core-InboxQuery.
                 if (class_exists(\Platform\Core\Inbox\Support\SourceListRegistry::class)) {
                     $sourceLists = resolve(\Platform\Core\Inbox\Support\SourceListRegistry::class);
                     foreach ($channelContracts as $channel => $contract) {
-                        $sourceLists->register(new \Platform\Inbox\Services\DelegatingSourceList($channel, $contract));
+                        $sourceLists->register(new \Platform\Core\Inbox\Services\DelegatingSourceList($channel, $contract));
                     }
                 }
             }
